@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -75,7 +76,7 @@ func writeData(rw *bufio.ReadWriter) {
 	}
 }
 
-func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.AddrInfo) (host.Host, error) {
+func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.AddrInfo, bootstrapInfos []peer.AddrInfo) (host.Host, error) {
 	relayAddrArray := [1]peer.AddrInfo{
 		relayAddrInfo,
 	}
@@ -138,6 +139,7 @@ func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.Ad
 	node.SetStreamHandler("/chat/0.0.1", handleStream)
 	node.Network().Notify(&myNotifiee{})
 	go startLocalPeerDiscovery(node)
+	bootstrapHost(ctx, node, idht, bootstrapInfos)
 	return node, nil
 }
 
@@ -171,4 +173,26 @@ func (n *myNotifiee) Disconnected(_ network.Network, c network.Conn) {
 	} else {
 		fmt.Println("Connection with relay", c.RemotePeer(), "has been terminated.")
 	}
+}
+
+func bootstrapHost(ctx context.Context, host host.Host, dhtInstance *dht.IpfsDHT, bootstrapPeers []peer.AddrInfo) error {
+	if err := testBootstraps(ctx, host, bootstrapPeers); err != nil {
+		return err
+	}
+	dhtInstance.Bootstrap(ctx)
+	fmt.Println("Succesfully bootstraped to the network.")
+
+	// Build host multiaddress
+	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", host.ID()))
+
+	// Now we can build a full multiaddress to reach this host
+	// by encapsulating both addresses:
+	// addr := routedHost.Addrs()[0]
+	addrs := host.Addrs()
+	fmt.Println("This host is reachable at the following bootstraped addresses: ")
+	for _, addr := range addrs {
+		fmt.Println(addr.Encapsulate(hostAddr))
+	}
+
+	return nil
 }

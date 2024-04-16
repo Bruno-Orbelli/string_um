@@ -41,6 +41,10 @@ var PUBLIC_RELAY_ADDRESSES = []string{
 	"/ip4/190.15.209.53/tcp/51000",
 }
 
+var PUBLIC_BOOTSTRAP_ADDRESSES = []string{
+	"ip4/190.15.209.53/tcp/52000",
+}
+
 func main() {
 	// log.SetAllLoggers(log.LevelDebug)
 
@@ -49,6 +53,7 @@ func main() {
 	peerId := flag.String("peer-id", "", "peer id")
 	relayAddr := flag.String("relay-address", PUBLIC_RELAY_ADDRESSES[0], "relay address")
 	relayId := flag.String("relay-id", "", "relay id")
+	bootstrapId := flag.String("bootstrap-id", "", "bootstrap id")
 	flag.Parse()
 
 	// The context governs the lifetime of the libp2p node.
@@ -57,16 +62,30 @@ func main() {
 	ctx = network.WithUseTransient(ctx, "relay info")
 	defer cancel()
 
+	// Build the list of addresses
 	ownAddrList := []string{*ownAddr}
 
+	// Build the relay address
 	relayMa := ma.StringCast(fmt.Sprintf("%s/p2p/%s", *relayAddr, *relayId))
 	relayInfo, err := peer.AddrInfoFromP2pAddr(relayMa)
 	if err != nil {
 		panic(err)
 	}
 
+	// Build the bootstrap addresses
+	bootstrapInfos := make([]peer.AddrInfo, len(PUBLIC_BOOTSTRAP_ADDRESSES))
+	for i, addr := range PUBLIC_BOOTSTRAP_ADDRESSES {
+		bootstrapMa := ma.StringCast(fmt.Sprintf("%s/p2p/%s", addr, *bootstrapId))
+		bootstrapInfo, err := peer.AddrInfoFromP2pAddr(bootstrapMa)
+		if err != nil {
+			panic(err)
+		}
+		bootstrapInfos[i] = *bootstrapInfo
+	}
+
+	// Create a new host.
 	fmt.Printf("Creating host with addresses: %s.\n", *ownAddr)
-	host1, err := CreateNewNode(ctx, ownAddrList, *relayInfo)
+	host1, err := CreateNewNode(ctx, ownAddrList, *relayInfo, bootstrapInfos)
 	if err != nil {
 		panic(err)
 	}
@@ -78,7 +97,6 @@ func main() {
 	}
 
 	fmt.Printf("Host info: %s.\n", hostinfo)
-
 	host1.SetStreamHandler("/chat/0.0.1", handleStream)
 
 	if *peerAddr != "" {
@@ -131,10 +149,10 @@ func main() {
 			panic(err)
 		}
 		for i := 0; i < 3; i++ {
-			fmt.Println("Trying to find peer at mDNS server...")
+			fmt.Println("Trying to find peer...")
 			if len(host1.Peerstore().PeerInfo(decodedPeerId).Addrs) == 0 {
-				fmt.Printf("Failed to get an address at Peerstore, retrying after %d seconds.\n", (i+1)*30)
-				time.Sleep(time.Duration((i+1)*30) * time.Second)
+				fmt.Printf("Failed to get an address at Peerstore, retrying after %d seconds.\n", (i+1)*5)
+				time.Sleep(time.Duration((i+1)*5) * time.Second)
 				continue
 			}
 			fmt.Println("Found address, attempting connection.")
