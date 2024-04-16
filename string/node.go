@@ -137,7 +137,20 @@ func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.Ad
 	// Configure the stream handler to handle streams
 	node.SetStreamHandler("/chat/0.0.1", handleStream)
 	node.Network().Notify(&myNotifiee{})
+	go startLocalPeerDiscovery(node)
 	return node, nil
+}
+
+func startLocalPeerDiscovery(host host.Host) {
+	peerChan := initMDNS(host)
+	for { // Get all identified peers
+		peer := <-peerChan
+		if len(host.Peerstore().PeerInfo(peer.ID).Addrs) == 0 {
+			host.Peerstore().AddAddrs(peer.ID, peer.Addrs, time.Minute*10)
+		}
+		fmt.Println("New hosts received.")
+		fmt.Println(host.Peerstore().PeersWithAddrs())
+	}
 }
 
 type myNotifiee struct {

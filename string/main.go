@@ -8,8 +8,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
-	"github.com/ipfs/go-log"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
@@ -42,11 +42,12 @@ var PUBLIC_RELAY_ADDRESSES = []string{
 }
 
 func main() {
-	log.SetAllLoggers(log.LevelDebug)
+	// log.SetAllLoggers(log.LevelDebug)
 
-	ownAddr := flag.String("own-address", "", "own address")
+	ownAddr := flag.String("own-address", H1_ADDRESSES[0], "own address")
 	peerAddr := flag.String("peer-address", "", "peer address")
-	relayAddr := flag.String("relay-address", "", "relay address")
+	peerId := flag.String("peer-id", "", "peer id")
+	relayAddr := flag.String("relay-address", PUBLIC_RELAY_ADDRESSES[0], "relay address")
 	relayId := flag.String("relay-id", "", "relay id")
 	flag.Parse()
 
@@ -56,15 +57,7 @@ func main() {
 	ctx = network.WithUseTransient(ctx, "relay info")
 	defer cancel()
 
-	if *ownAddr == "" {
-		ownAddr = &H1_ADDRESSES[0]
-	}
-
 	ownAddrList := []string{*ownAddr}
-
-	if *relayAddr == "" {
-		relayAddr = &PUBLIC_RELAY_ADDRESSES[0]
-	}
 
 	relayMa := ma.StringCast(fmt.Sprintf("%s/p2p/%s", *relayAddr, *relayId))
 	relayInfo, err := peer.AddrInfoFromP2pAddr(relayMa)
@@ -124,16 +117,47 @@ func main() {
 
 		// Open a stream with the given peer.
 		s, err := host1.NewStream(ctx, peerAddrInfo.ID, "/chat/0.0.1")
-		rw := bufio.NewReadWriter(bufio.NewReader(s), bufio.NewWriter(s))
 		if err != nil {
 			panic(err)
 		}
+		rw := bufio.NewReadWriter(bufio.NewReader(s), bufio.NewWriter(s))
 
 		go writeData(rw)
 		go readData(rw, peerAddrInfo.ID)
+
+	} else if *peerId != "" {
+		decodedPeerId, err := peer.Decode(*peerId)
+		if err != nil {
+			panic(err)
+		}
+		for i := 0; i < 3; i++ {
+			fmt.Println("Trying to find peer at mDNS server...")
+			if len(host1.Peerstore().PeerInfo(decodedPeerId).Addrs) == 0 {
+				fmt.Printf("Failed to get an address at Peerstore, retrying after %d seconds.\n", (i+1)*30)
+				time.Sleep(time.Duration((i+1)*30) * time.Second)
+				continue
+			}
+			fmt.Println("Found address, attempting connection.")
+			if err = host1.Connect(ctx, host1.Peerstore().PeerInfo(decodedPeerId)); err != nil {
+				panic(err)
+			}
+			break
+		}
+		// Open a stream with the given peer.
+		s, err := host1.NewStream(ctx, decodedPeerId, "/chat/0.0.1")
+		if err != nil {
+			panic(err)
+		}
+		rw := bufio.NewReadWriter(bufio.NewReader(s), bufio.NewWriter(s))
+
+		go writeData(rw)
+		go readData(rw, decodedPeerId)
+
 	} else {
 		fmt.Println("Connecting to relay at", relayInfo.String())
-		host1.Connect(ctx, *relayInfo)
+		if err = host1.Connect(ctx, *relayInfo); err != nil {
+			panic(err)
+		}
 		_, err = client.Reserve(ctx, host1, *relayInfo)
 		if err != nil {
 			panic(err)
