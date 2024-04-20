@@ -11,6 +11,7 @@ import (
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/routing"
+	discovery "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -76,7 +77,7 @@ func writeData(rw *bufio.ReadWriter) {
 	}
 }
 
-func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.AddrInfo, bootstrapInfos []peer.AddrInfo) (host.Host, error) {
+func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.AddrInfo, bootstrapInfos []peer.AddrInfo) (host.Host, *dht.IpfsDHT, error) {
 	relayAddrArray := [1]peer.AddrInfo{
 		relayAddrInfo,
 	}
@@ -86,7 +87,7 @@ func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.Ad
 		2048,       // Select key length when possible (i.e. RSA).
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var idht *dht.IpfsDHT
@@ -97,7 +98,7 @@ func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.Ad
 		connmgr.WithGracePeriod(time.Minute),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	node, err := libp2p.New(
@@ -132,7 +133,7 @@ func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.Ad
 		libp2p.EnableHolePunching(),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Configure the stream handler to handle streams
@@ -140,7 +141,8 @@ func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.Ad
 	node.Network().Notify(&myNotifiee{})
 	go startLocalPeerDiscovery(node)
 	bootstrapHost(ctx, node, idht, bootstrapInfos)
-	return node, nil
+	go advertiseService(ctx, idht)
+	return node, idht, nil
 }
 
 func startLocalPeerDiscovery(host host.Host) {
@@ -195,4 +197,19 @@ func bootstrapHost(ctx context.Context, host host.Host, dhtInstance *dht.IpfsDHT
 	}
 
 	return nil
+}
+
+func advertiseService(ctx context.Context, idht *dht.IpfsDHT) {
+	for {
+		announcement := discovery.NewRoutingDiscovery(idht)
+		_, err := announcement.Advertise(ctx, "example-discovery")
+		if err != nil {
+			fmt.Println("Failed to advertise, retrying in 15 seconds.")
+			time.Sleep(time.Second * 15)
+			continue
+		}
+		fmt.Println("Successfully advertised.")
+		time.Sleep(time.Minute * 10)
+	}
+
 }

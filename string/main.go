@@ -18,7 +18,7 @@ import (
 )
 
 var H1_ADDRESSES = []string{
-	"/ip4/192.168.54.224/tcp/50004",
+	"/ip4/192.168.54.225/tcp/50004",
 	"/ip4/127.0.0.1/tcp/50000",
 	"/ip6/::1/tcp/50001",
 	"/ip4/127.0.0.1/udp/50002/quic",
@@ -30,19 +30,19 @@ var H2_ADDRESSES = []string{
 	"/ip6/::1/tcp/50006",
 	"/ip4/127.0.0.1/udp/50007/quic",
 	"/ip6/::1/udp/50008/quic",
-	"/ip4/192.168.54.224/tcp/50009",
+	"/ip4/192.168.54.225/tcp/50009",
 }
 
 var RELAY_ADDRESSES = []string{
-	"/ip4/192.168.54.224/tcp/51000",
+	"/ip4/192.168.54.225/tcp/51001",
 }
 
 var PUBLIC_RELAY_ADDRESSES = []string{
-	"/ip4/190.15.209.53/tcp/51000",
+	"/ip4/190.15.209.53/tcp/51001",
 }
 
 var PUBLIC_BOOTSTRAP_ADDRESSES = []string{
-	"ip4/190.15.209.53/tcp/52000",
+	"/ip4/190.15.209.53/tcp/51000",
 }
 
 func main() {
@@ -85,7 +85,7 @@ func main() {
 
 	// Create a new host.
 	fmt.Printf("Creating host with addresses: %s.\n", *ownAddr)
-	host1, err := CreateNewNode(ctx, ownAddrList, *relayInfo, bootstrapInfos)
+	host1, _, err := CreateNewNode(ctx, ownAddrList, *relayInfo, bootstrapInfos)
 	if err != nil {
 		panic(err)
 	}
@@ -148,6 +148,18 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		/* peerAddrInfo, err := dht1.FindPeer(ctx, decodedPeerId)
+		if err != nil {
+			panic(err)
+		}
+		if len(peerAddrInfo.Addrs) != 0 {
+			fmt.Println("Found peer at", peerAddrInfo.Addrs[0])
+			if err = host1.Connect(ctx, peerAddrInfo); err != nil {
+				panic(err)
+			}
+		} else {
+			fmt.Println("Failed to find peer at", decodedPeerId)
+		} */
 		for i := 0; i < 3; i++ {
 			fmt.Println("Trying to find peer...")
 			if len(host1.Peerstore().PeerInfo(decodedPeerId).Addrs) == 0 {

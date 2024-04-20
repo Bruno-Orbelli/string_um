@@ -23,7 +23,7 @@ func initMDNS(peerhost host.Host) chan peer.AddrInfo {
 	n.PeerChan = make(chan peer.AddrInfo)
 
 	// An hour might be a long long period in practical applications. But this is fine for us
-	ser := mdns.NewMdnsService(peerhost, "localMDNS", n)
+	ser := mdns.NewMdnsService(peerhost, "localMDNS", n) // probarlo, correrlo en la nube
 	if err := ser.Start(); err != nil {
 		panic(err)
 	}
