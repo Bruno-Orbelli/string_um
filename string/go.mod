@@ -1,4 +1,4 @@
-module libp2p_relay
+module github.com/Bruno-Orbelli/string_um/string
 
 go 1.22.2
 
