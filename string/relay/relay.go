@@ -22,13 +22,11 @@ import (
 )
 
 var RELAY_ADDRESSES = []string{
-	"/ip4/127.0.0.1/tcp/51000",
-	"/ip4/192.168.54.224/tcp/51000",
-	"/ip6/::1/tcp/51000",
+	"/ip6/::/tcp/51001",
 }
 
 var PUBLIC_RELAY_ADDRESSES = []string{
-	"/ip4/190.15.209.53/tcp/51000",
+	"/ip6/2002:c833:29b0:2:f816:3eff:fed5:bda/tcp/51001",
 }
 
 func main() {

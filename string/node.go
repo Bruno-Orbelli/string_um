@@ -5,13 +5,18 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"slices"
+	"syscall"
 	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
+	discovery "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -25,10 +30,11 @@ func handleStream(stream network.Stream) {
 	// Create a buffer stream for non-blocking read and write.
 	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
 	go readData(rw, stream.Conn().RemotePeer())
 	go writeData(rw)
-
-	// 'stream' will stay open until you close it (or the other side closes it).
 }
 
 func readData(rw *bufio.ReadWriter, remotePeer peer.ID) {
@@ -75,35 +81,61 @@ func writeData(rw *bufio.ReadWriter) {
 	}
 }
 
-func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.AddrInfo) (host.Host, error) {
-	relayAddrArray := [1]peer.AddrInfo{
-		relayAddrInfo,
+var config = Config{}
+
+func CreateNewNode(ctx context.Context, listenAddrs []ma.Multiaddr, relayAddrs []ma.Multiaddr, bootsAddrs []ma.Multiaddr, protocolId protocol.ID) (host.Host, *dht.IpfsDHT, error) {
+	// Set the configuration
+	config.ListenAddresses = listenAddrs
+	config.RelayAddresses = relayAddrs
+	config.BootstrapPeers = bootsAddrs
+	config.ProtocolID = protocol.ConvertToStrings([]protocol.ID{protocolId})[0]
+
+	// Convert relay addresses to peer.AddrInfo
+	relayAddrInfos := make([]peer.AddrInfo, len(relayAddrs))
+	for i, relayAddr := range relayAddrs {
+		addrInfo, err := peer.AddrInfoFromP2pAddr(relayAddr)
+		if err != nil {
+			return nil, nil, err
+		}
+		relayAddrInfos[i] = *addrInfo
 	}
 
+	// Convert bootstrap addresses to peer.AddrInfo
+	bootsAddrInfos := make([]peer.AddrInfo, len(bootsAddrs))
+	for i, bootsAddr := range bootsAddrs {
+		addrInfo, err := peer.AddrInfoFromP2pAddr(bootsAddr)
+		if err != nil {
+			return nil, nil, err
+		}
+		bootsAddrInfos[i] = *addrInfo
+	}
+
+	// Generate a key pair for the host
 	priv, _, err := crypto.GenerateKeyPair(
-		crypto.RSA, // Select your key type. Ed25519 are nice short
-		2048,       // Select key length when possible (i.e. RSA).
+		crypto.RSA,
+		2048,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var idht *dht.IpfsDHT
 
+	// Create a new libp2p Host with Connection Manager
 	connmgr, err := connmgr.NewConnManager(
 		100, // Lowwater
 		400, // HighWater,
 		connmgr.WithGracePeriod(time.Minute),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	node, err := libp2p.New(
 		// Use the keypair we generated
 		libp2p.Identity(priv),
 		// Multiple listen addresses
-		libp2p.ListenAddrStrings(strAddrs...),
+		libp2p.ListenAddrs(listenAddrs...),
 		// support TLS connections
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 		// support noise connections
@@ -120,24 +152,35 @@ func CreateNewNode(ctx context.Context, strAddrs []string, relayAddrInfo peer.Ad
 			idht, err = dht.New(ctx, h)
 			return idht, err
 		}),
-		libp2p.EnableAutoRelayWithStaticRelays(relayAddrArray[:]),
-		// If you want to help other peers to figure out if they are behind
-		// NATs, you can launch the server-side of AutoNAT too (AutoRelay
-		// already runs the client)
-		//
-		// This service is highly rate-limited and should not cause any
-		// performance issues.
+		libp2p.EnableAutoRelayWithStaticRelays(relayAddrInfos),
 		libp2p.EnableNATService(),
 		libp2p.EnableHolePunching(),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Configure the stream handler to handle streams
-	node.SetStreamHandler("/chat/0.0.1", handleStream)
+	node.SetStreamHandler(protocolId, handleStream)
 	node.Network().Notify(&myNotifiee{})
-	return node, nil
+
+	bootstrapHost(ctx, node, idht, bootsAddrInfos)
+
+	go advertiseService(ctx, idht)
+	go startLocalPeerDiscovery(node)
+
+	return node, idht, nil
+}
+
+func startLocalPeerDiscovery(host host.Host) {
+	peerChan := initMDNS(host)
+	for { // Get all identified peers
+		peer := <-peerChan
+		if len(host.Peerstore().PeerInfo(peer.ID).Addrs) == 0 {
+			host.Peerstore().AddAddrs(peer.ID, peer.Addrs, time.Minute*10)
+		}
+		fmt.Println("New hosts received. Peers with addrs:", host.Peerstore().PeersWithAddrs())
+	}
 }
 
 type myNotifiee struct {
@@ -145,17 +188,61 @@ type myNotifiee struct {
 }
 
 func (n *myNotifiee) Connected(_ network.Network, c network.Conn) {
-	if !slices.Contains(PUBLIC_RELAY_ADDRESSES, c.RemoteMultiaddr().String()) {
-		fmt.Println("Established connection with node:", c.RemotePeer())
+	var nodeType string
+	if slices.Contains(config.RelayAddresses, c.RemoteMultiaddr()) {
+		nodeType = "relay"
+	} else if slices.Contains(config.BootstrapPeers, c.RemoteMultiaddr()) {
+		nodeType = "bootstrap"
 	} else {
-		fmt.Println("Established connection with relay:", c.RemotePeer())
+		nodeType = "peer"
 	}
+	fmt.Printf("Established connection with %s: %s\n", nodeType, c.RemotePeer())
 }
 
 func (n *myNotifiee) Disconnected(_ network.Network, c network.Conn) {
-	if !slices.Contains(PUBLIC_RELAY_ADDRESSES, c.RemoteMultiaddr().String()) {
-		fmt.Println("Connection with", c.RemotePeer(), "has been terminated.")
+	var nodeType string
+	if slices.Contains(config.RelayAddresses, c.RemoteMultiaddr()) {
+		nodeType = "relay"
+	} else if slices.Contains(config.BootstrapPeers, c.RemoteMultiaddr()) {
+		nodeType = "bootstrap"
 	} else {
-		fmt.Println("Connection with relay", c.RemotePeer(), "has been terminated.")
+		nodeType = "peer"
+	}
+	fmt.Printf("Connection with %s (%s) has been terminated.", nodeType, c.RemotePeer())
+}
+
+func bootstrapHost(ctx context.Context, host host.Host, dhtInstance *dht.IpfsDHT, bootstrapPeers []peer.AddrInfo) error {
+	if err := testBootstraps(ctx, host, bootstrapPeers); err != nil {
+		return err
+	}
+	dhtInstance.Bootstrap(ctx)
+	fmt.Println("Succesfully bootstraped to the network.")
+
+	// Build host multiaddress
+	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", host.ID()))
+
+	// Now we can build a full multiaddress to reach this host
+	// by encapsulating both addresses:
+	// addr := routedHost.Addrs()[0]
+	addrs := host.Addrs()
+	fmt.Println("This host is reachable at the following bootstraped addresses: ")
+	for _, addr := range addrs {
+		fmt.Println(addr.Encapsulate(hostAddr))
+	}
+
+	return nil
+}
+
+func advertiseService(ctx context.Context, idht *dht.IpfsDHT) {
+	for {
+		announcement := discovery.NewRoutingDiscovery(idht)
+		_, err := announcement.Advertise(ctx, "example-discovery")
+		if err != nil {
+			fmt.Println("Failed to advertise, retrying in 15 seconds.")
+			time.Sleep(time.Second * 15)
+			continue
+		}
+		fmt.Println("Successfully advertised.")
+		time.Sleep(time.Minute * 10)
 	}
 }

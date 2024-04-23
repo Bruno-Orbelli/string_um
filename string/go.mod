@@ -3,7 +3,6 @@ module libp2p_relay
 go 1.22.2
 
 require (
-	github.com/ipfs/go-log v1.0.5
 	github.com/libp2p/go-libp2p v0.33.2
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/multiformats/go-multiaddr v0.12.3
@@ -37,6 +36,7 @@ require (
 	github.com/ipfs/boxo v0.10.0 // indirect
 	github.com/ipfs/go-cid v0.4.1 // indirect
 	github.com/ipfs/go-datastore v0.6.0 // indirect
+	github.com/ipfs/go-log v1.0.5 // indirect
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect
 	github.com/ipld/go-ipld-prime v0.20.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
@@ -57,6 +57,7 @@ require (
 	github.com/libp2p/go-netroute v0.2.1 // indirect
 	github.com/libp2p/go-reuseport v0.4.0 // indirect
 	github.com/libp2p/go-yamux/v4 v4.0.1 // indirect
+	github.com/libp2p/zeroconf/v2 v2.2.0 // indirect
 	github.com/marten-seemann/tcp v0.0.0-20210406111302-dfbc87cc63fd // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/miekg/dns v1.1.58 // indirect
