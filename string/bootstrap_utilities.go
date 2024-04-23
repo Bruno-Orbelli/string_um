@@ -12,21 +12,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 )
 
-/* var (
-	IPFS_PEERS = convertPeers([]string{
-		"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
-		"/ip4/104.236.179.241/tcp/4001/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
-		"/ip4/128.199.219.111/tcp/4001/p2p/QmSoLSafTMBsPKadTEgaXctDQVcqN88CNLHXMkTNwMKPnu",
-		"/ip4/104.236.76.40/tcp/4001/p2p/QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64",
-		"/ip4/178.62.158.247/tcp/4001/p2p/QmSoLer265NRgSp2LA3dPaeykiS1J6DifTC88f5uVQKNAd",
-		"/ip6/2604:a880:1:20::203:d001/tcp/4001/p2p/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
-		"/ip6/2400:6180:0:d0::151:6001/tcp/4001/p2p/QmSoLSafTMBsPKadTEgaXctDQVcqN88CNLHXMkTNwMKPnu",
-		"/ip6/2604:a880:800:10::4a:5001/tcp/4001/p2p/QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64",
-		"/ip6/2a03:b0c0:0:1010::23:1001/tcp/4001/p2p/QmSoLer265NRgSp2LA3dPaeykiS1J6DifTC88f5uVQKNAd",
-	})
-	LOCAL_PEER_ENDPOINT = "http://localhost:5001/api/v0/id"
-) */
-
 // Borrowed from ipfs code to parse the results of the command `ipfs id`
 type IdOutput struct {
 	ID              string
@@ -35,31 +20,6 @@ type IdOutput struct {
 	AgentVersion    string
 	ProtocolVersion string
 }
-
-// quick and dirty function to get the local ipfs daemons address for bootstrapping
-/* func getLocalPeerInfo() []peer.AddrInfo {
-	resp, err := http.PostForm(LOCAL_PEER_ENDPOINT, nil)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	var js IdOutput
-	err = json.Unmarshal(body, &js)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	for _, addr := range js.Addresses {
-		// For some reason, possibly NAT traversal, we need to grab the loopback ip address
-		if addr[0:8] == "/ip4/127" {
-			return convertPeers([]string{addr})
-		}
-	}
-	log.Fatalln(err)
-	return make([]peer.AddrInfo, 1) // not reachable, but keeps the compiler happy
-} */
 
 // This code is borrowed from the go-ipfs bootstrap process
 func testBootstraps(ctx context.Context, ph host.Host, peers []peer.AddrInfo) error {
