@@ -1,8 +1,9 @@
-package client
+package database_api
 
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"string_um/string/models"
@@ -18,21 +19,30 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var filteredMessages []models.Message
-	if r.URL.Query().Get("chat_id") != "" {
-		uuid, err := uuid.Parse(r.URL.Query().Get("chat_id"))
+	filteredMessages := Messages
+	if r.URL.Query().Get("chatID") != "" {
+		uuid, err := uuid.Parse(r.URL.Query().Get("chatID"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
-		for _, message := range Messages {
-			if message.Chat.ID == uuid {
-				filteredMessages = append(filteredMessages, message)
+		for i, message := range filteredMessages {
+			if message.Chat.ID != uuid {
+				filteredMessages = append(filteredMessages[:i], filteredMessages[i+1:]...)
 			}
 		}
-	} else {
-		copy(filteredMessages, Messages)
+	}
+	if r.URL.Query().Get("alreadySent") != "" {
+		alreadySent, err := strconv.ParseBool(r.URL.Query().Get("alreadySent"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		for i, message := range filteredMessages {
+			if message.AlredySent != alreadySent {
+				filteredMessages = append(filteredMessages[:i], filteredMessages[i+1:]...)
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -89,6 +99,32 @@ func CreateMessage(w http.ResponseWriter, r *http.Request) {
 
 	// Set status code to 201 (Created)
 	w.WriteHeader(http.StatusCreated)
+}
+
+// Handler function to handle PUT requests to /messages endpoint
+func UpdateMessageToSent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if the ID is provided in the URL
+	uuid, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Update the chat in the messages slice
+	for _, message := range Messages {
+		if message.ID == uuid {
+			message.AlredySent = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+
+	http.Error(w, "Message not found", http.StatusNotFound)
 }
 
 // Handler function to handle DELETE requests to /messages endpoint

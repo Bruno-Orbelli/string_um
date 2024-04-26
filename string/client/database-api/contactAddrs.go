@@ -1,4 +1,4 @@
-package client
+package database_api
 
 import (
 	"encoding/json"
@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var contactAddrs []models.ContactAddress
+var ContactAddrs []models.ContactAddress
 
 func GetContactAddresses(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -18,8 +18,19 @@ func GetContactAddresses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	filteredContactAddrs := ContactAddrs
+	if r.URL.Query().Get("contactID") != "" {
+		for _, contactAddr := range filteredContactAddrs {
+			if contactAddr.Contact.ID != r.URL.Query().Get("contactID") {
+				filteredContactAddrs = append(filteredContactAddrs, contactAddr)
+			}
+		}
+	} else {
+		filteredContactAddrs = ContactAddrs
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(contactAddrs)
+	json.NewEncoder(w).Encode(filteredContactAddrs)
 }
 
 func GetContactAddress(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +45,7 @@ func GetContactAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, contactAddr := range contactAddrs {
+	for _, contactAddr := range ContactAddrs {
 		if contactAddr.ID == uuid {
 			// Set content type header to application/json
 			w.Header().Set("Content-Type", "application/json")
@@ -62,13 +73,15 @@ func CreateContactAddress(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	newContactAddr.ID = uuid.New()
 	newContactAddr.ObservedAt = time.Now()
 
 	// Add the new addr to the addrs slice
-	contactAddrs = append(contactAddrs, newContactAddr)
+	ContactAddrs = append(ContactAddrs, newContactAddr)
 
 	// Set status code to 201 (Created)
 	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(newContactAddr)
 }
 
 // Handler function to handle DELETE requests to /contact-addresses endpoint
@@ -90,9 +103,9 @@ func DeleteContactAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove the last addr from the addrs slice
-	for i, contactAddr := range contactAddrs {
+	for i, contactAddr := range ContactAddrs {
 		if contactAddr.ID == uuid {
-			contactAddrs = append(contactAddrs[:i], contactAddrs[i+1:]...)
+			ContactAddrs = append(ContactAddrs[:i], ContactAddrs[i+1:]...)
 
 			// Set status code to 204 (No Content)
 			w.WriteHeader(http.StatusNoContent)

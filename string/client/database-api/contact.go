@@ -1,4 +1,4 @@
-package client
+package database_api
 
 import (
 	"encoding/json"

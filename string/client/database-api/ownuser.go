@@ -1,4 +1,4 @@
-package client
+package database_api
 
 import (
 	"encoding/json"
@@ -10,8 +10,14 @@ import (
 var OwnUsers []models.OwnUser
 
 func GetOwnUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if len(OwnUsers) == 0 {
+		// Set status code to 404 (Not Found)
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 

@@ -1,4 +1,4 @@
-package client
+package database_api
 
 import (
 	"encoding/json"
@@ -17,8 +17,18 @@ func GetChats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	filteredChats := Chats
+	if r.URL.Query().Get("contactID") != "" {
+		id := r.URL.Query().Get("contactID")
+		for i, chat := range filteredChats {
+			if chat.Contact.ID != id {
+				filteredChats = append(filteredChats[:i], filteredChats[i+1:]...)
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Chats)
+	json.NewEncoder(w).Encode(filteredChats)
 }
 
 func GetChat(w http.ResponseWriter, r *http.Request) {
