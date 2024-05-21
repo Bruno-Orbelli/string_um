@@ -3,7 +3,13 @@ package database_api
 import (
 	"fmt"
 	"net/http"
+	"string_um/string/models"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
+
+var Database *gorm.DB
 
 func getMux() *http.ServeMux {
 	mux := http.NewServeMux()
@@ -30,7 +36,7 @@ func getMux() *http.ServeMux {
 	mux.HandleFunc("/messages", GetMessages)
 	mux.HandleFunc("/messages/{id}", GetMessage)
 	mux.HandleFunc("/messages/create", CreateMessage)
-	mux.HandleFunc("/messages/setAsSent/{id}", UpdateMessageToSent)
+	mux.HandleFunc("/messages/update/{id}", UpdateMessage)
 	mux.HandleFunc("/messages/delete/{id}", DeleteMessage)
 
 	// Own User
@@ -42,7 +48,24 @@ func getMux() *http.ServeMux {
 }
 
 func RunDatabaseAPI() {
+	var err error
 	mux := getMux()
+	Database, err = gorm.Open(sqlite.Open("test.db"), &gorm.Config{TranslateError: true})
+	if err != nil {
+		panic(fmt.Sprintf("Failed to connect to database: %v", err))
+	}
+
+	// Auto-migrate the database
+	if err = Database.AutoMigrate(
+		&models.Chat{},
+		&models.Contact{},
+		&models.ContactAddress{},
+		&models.Message{},
+		&models.OwnUser{},
+	); err != nil {
+		panic(fmt.Sprintf("Failed to auto-migrate database: %v", err))
+	}
+
 	http.ListenAndServe(":3000", mux)
 	fmt.Println("Database API running on port 3000")
 }

@@ -3,159 +3,179 @@ package database_api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
-	"time"
+	"net/url"
 
 	"string_um/string/models"
+
+	"errors"
 
 	"github.com/google/uuid"
 )
 
-var Messages []models.Message
-
+// Handler function to handle GET requests to /messages endpoint
 func GetMessages(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		HandleError(w, errors.New("method not allowed"))
 		return
 	}
 
-	filteredMessages := Messages
-	if r.URL.Query().Get("chatID") != "" {
-		uuid, err := uuid.Parse(r.URL.Query().Get("chatID"))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		for i, message := range filteredMessages {
-			if message.Chat.ID != uuid {
-				filteredMessages = append(filteredMessages[:i], filteredMessages[i+1:]...)
-			}
-		}
+	// Get filtering parameters from the URL query
+	params, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		HandleError(w, err)
+		return
 	}
-	if r.URL.Query().Get("alreadySent") != "" {
-		alreadySent, err := strconv.ParseBool(r.URL.Query().Get("alreadySent"))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		for i, message := range filteredMessages {
-			if message.AlredySent != alreadySent {
-				filteredMessages = append(filteredMessages[:i], filteredMessages[i+1:]...)
-			}
-		}
+
+	// Marshal the query parameters into a Message struct
+	jsonMessage, err := json.Marshal(params)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+	var message models.Message
+	if err := json.Unmarshal(jsonMessage, &message); err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	// Filter the Messages slice based on the query parameters
+	var filteredMessages []models.Message
+	result := Database.Where(message).Find(&filteredMessages)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(filteredMessages)
 }
 
+// Handler function to handle GET requests to /messages/{id} endpoint
 func GetMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		HandleError(w, errors.New("method not allowed"))
 		return
 	}
 
+	// Check if the ID is provided in the URL
+	if r.PathValue("id") == "" {
+		HandleError(w, errors.New("id is required"))
+		return
+	}
+
+	// Parse the ID from the URL
 	uuid, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		HandleError(w, err)
 		return
 	}
 
-	for _, message := range Messages {
-		if message.ID == uuid {
-			// Set content type header to application/json
-			w.Header().Set("Content-Type", "application/json")
-
-			// Marshal messages slice to JSON
-			json.NewEncoder(w).Encode(message)
-			return
-		}
+	var message models.Message
+	result := Database.First(&message, "id = ?", uuid)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
 	}
 
-	http.Error(w, "Contact not found", http.StatusNotFound)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(message)
 }
 
-// Handler function to handle POST requests to /messages endpoint
+// Handler function to handle POST requests to /messages/create endpoint
 func CreateMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		HandleError(w, errors.New("method not allowed"))
 		return
 	}
 
 	// Parse JSON request body into a Message struct
 	var newMessage models.Message
-	err := json.NewDecoder(r.Body).Decode(&newMessage)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&newMessage); err != nil {
+		HandleError(w, err)
 		return
 	}
-	newMessage.SentAt = time.Now()
-	if newMessage.SentBy.ID == OwnUsers[0].ID {
-		newMessage.AlredySent = false
-	}
 
-	// Add the new chat to the messages slice
-	Messages = append(Messages, newMessage)
+	// Generate a new UUID for the message
+	newMessage.ID = uuid.New()
+
+	// Add the new message to the database
+	result := Database.Create(&newMessage)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
+	}
 
 	// Set status code to 201 (Created)
 	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(newMessage)
 }
 
-// Handler function to handle PUT requests to /messages endpoint
-func UpdateMessageToSent(w http.ResponseWriter, r *http.Request) {
+// Handler function to handle PUT requests to /messages/update/{id} endpoint
+func UpdateMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		HandleError(w, errors.New("method not allowed"))
 		return
 	}
 
 	// Check if the ID is provided in the URL
-	uuid, err := uuid.Parse(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if r.PathValue("id") == "" {
+		HandleError(w, errors.New("id is required"))
 		return
 	}
 
-	// Update the chat in the messages slice
-	for _, message := range Messages {
-		if message.ID == uuid {
-			message.AlredySent = true
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+	// Parse the ID from the URL
+	uuid, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		HandleError(w, err)
+		return
 	}
 
-	http.Error(w, "Message not found", http.StatusNotFound)
+	// Parse JSON request body into a map
+	var partialMessage map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&partialMessage); err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	// Update the message with the provided ID
+	var updatedMessage models.Message
+	result := Database.Model(&updatedMessage).Where("id = ?", uuid).Updates(partialMessage)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
+	}
+
+	// Set status code to 200 and return the updated message
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(updatedMessage)
 }
 
 // Handler function to handle DELETE requests to /messages endpoint
 func DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		HandleError(w, errors.New("method not allowed"))
 		return
 	}
 
 	if r.PathValue("id") == "" {
-		http.Error(w, "ID is required", http.StatusBadRequest)
+		HandleError(w, errors.New("id is required"))
 		return
 	}
 
 	uuid, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		HandleError(w, err)
 		return
 	}
 
-	// Remove the last chat from the messages slice
-	for i, chat := range Messages {
-		if chat.ID == uuid {
-			Messages = append(Messages[:i], Messages[i+1:]...)
-
-			// Set status code to 204 (No Content)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+	// Remove the message with the provided ID
+	result := Database.Delete(&models.Message{}, uuid)
+	if result.RowsAffected == 0 {
+		HandleError(w, result.Error)
+		return
 	}
 
-	// Set status code to 404 (Not Found)
-	w.WriteHeader(http.StatusNotFound)
+	// Set status code to 204 (No Content)
+	w.WriteHeader(http.StatusNoContent)
 }

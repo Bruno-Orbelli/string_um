@@ -180,32 +180,38 @@ func main() {
 			panic(err)
 		}
 
+		fmt.Println("Contact added.")
+
 		var destContact models.Contact
 		var chat models.Chat
 
 		// Get contact to send message to.
 		resp, err := http.Get(fmt.Sprintf("http://localhost:3000/contacts/%s", config.PeerID))
 		if err != nil || resp.StatusCode != http.StatusOK {
-			panic(err)
+			panic(errors.New("unexpected error or status code: " + resp.Status))
 		}
 		if err = json.NewDecoder(resp.Body).Decode(&destContact); err != nil {
 			panic(err)
 		}
 
+		fmt.Println("Contact found:", destContact)
+
 		// Get chat with contact.
-		resp, err = http.Get(fmt.Sprintf("http://localhost:3000/chats?contactID=%s", destContact.ID))
+		resp, err = http.Get(fmt.Sprintf("http://localhost:3000/chats?contact_id=%s", destContact.ID))
 		if err != nil || resp.StatusCode != http.StatusOK {
 			panic(errors.New("unexpected error or status code: " + resp.Status))
 		}
+		fmt.Println("Chat found.")
 		respBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			panic(err)
 		}
-		if string(respBytes) == "null\n" {
+		fmt.Println("Chat found 2.")
+		if string(respBytes) == "" {
 			fmt.Printf("Creating new chat with %s.\n", destContact.Name)
 			chat = models.Chat{
-				ID:      uuid.New(),
-				Contact: destContact,
+				ID:        uuid.New(),
+				ContactID: destContact.ID,
 			}
 			chatJSON, err := json.Marshal(chat)
 			if err != nil {
@@ -224,12 +230,12 @@ func main() {
 		}
 
 		message := models.Message{
-			ID:         uuid.New(),
-			Chat:       chat,
-			AlredySent: false,
-			SentBy:     *ownUserContact,
-			SentAt:     time.Now(),
-			Message:    "Hello, world!",
+			ID:          uuid.New(),
+			ChatID:      chat.ID,
+			AlreadySent: false,
+			SentByID:    ownUserContact.ID,
+			SentAt:      time.Now(),
+			Message:     "Hello, world!",
 		}
 		messageJSON, err := json.Marshal(message)
 		if err != nil {

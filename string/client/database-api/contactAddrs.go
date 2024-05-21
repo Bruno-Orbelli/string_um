@@ -3,116 +3,179 @@ package database_api
 import (
 	"encoding/json"
 	"net/http"
-	"time"
+	"net/url"
 
 	"string_um/string/models"
+
+	"errors"
 
 	"github.com/google/uuid"
 )
 
-var ContactAddrs []models.ContactAddress
-
+// Handler function to handle GET requests to /contactAddress endpoint
 func GetContactAddresses(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		HandleError(w, errors.New("method not allowed"))
 		return
 	}
 
-	filteredContactAddrs := ContactAddrs
-	if r.URL.Query().Get("contactID") != "" {
-		for _, contactAddr := range filteredContactAddrs {
-			if contactAddr.Contact.ID != r.URL.Query().Get("contactID") {
-				filteredContactAddrs = append(filteredContactAddrs, contactAddr)
-			}
-		}
-	} else {
-		filteredContactAddrs = ContactAddrs
+	// Get filtering parameters from the URL query
+	params, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	// Marshal the query parameters into a ContactAddress struct
+	jsonContactAddress, err := json.Marshal(params)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+	var contactAddr models.ContactAddress
+	if err := json.Unmarshal(jsonContactAddress, &contactAddr); err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	// Filter the ContactAddress entity based on the query parameters
+	var filteredContactAddresses []models.ContactAddress
+	result := Database.Where(contactAddr).Find(&filteredContactAddresses)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(filteredContactAddrs)
+	json.NewEncoder(w).Encode(filteredContactAddresses)
 }
 
+// Handler function to handle GET requests to /contactAddress/{id} endpoint
 func GetContactAddress(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		HandleError(w, errors.New("method not allowed"))
 		return
 	}
 
+	// Check if the ID is provided in the URL
+	if r.PathValue("id") == "" {
+		HandleError(w, errors.New("id is required"))
+		return
+	}
+
+	// Parse the ID from the URL
 	uuid, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		HandleError(w, err)
 		return
 	}
 
-	for _, contactAddr := range ContactAddrs {
-		if contactAddr.ID == uuid {
-			// Set content type header to application/json
-			w.Header().Set("Content-Type", "application/json")
-
-			// Marshal users slice to JSON
-			json.NewEncoder(w).Encode(contactAddr)
-			return
-		}
+	var contactAddress models.ContactAddress
+	result := Database.First(&contactAddress, "id = ?", uuid)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
 	}
 
-	http.Error(w, "Contact not found", http.StatusNotFound)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(contactAddress)
 }
 
-// Handler function to handle POST requests to /contact-addresses endpoint
+// Handler function to handle POST requests to /contactAddress/create endpoint
 func CreateContactAddress(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		HandleError(w, errors.New("method not allowed"))
 		return
 	}
 
 	// Parse JSON request body into a ContactAddress struct
-	var newContactAddr models.ContactAddress
-	err := json.NewDecoder(r.Body).Decode(&newContactAddr)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	var newContactAddress models.ContactAddress
+	if err := json.NewDecoder(r.Body).Decode(&newContactAddress); err != nil {
+		HandleError(w, err)
 		return
 	}
-	newContactAddr.ID = uuid.New()
-	newContactAddr.ObservedAt = time.Now()
 
-	// Add the new addr to the addrs slice
-	ContactAddrs = append(ContactAddrs, newContactAddr)
+	// Generate a new UUID for the contactAddres
+	newContactAddress.ID = uuid.New()
+
+	// Add the new contactAddres to the database
+	result := Database.Create(&newContactAddress)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
+	}
 
 	// Set status code to 201 (Created)
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newContactAddr)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(newContactAddress)
 }
 
-// Handler function to handle DELETE requests to /contact-addresses endpoint
+// Handler function to handle PUT requests to /contactAddress/update/{id} endpoint
+func UpdateContactAddress(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		HandleError(w, errors.New("method not allowed"))
+		return
+	}
+
+	// Check if the ID is provided in the URL
+	if r.PathValue("id") == "" {
+		HandleError(w, errors.New("id is required"))
+		return
+	}
+
+	// Parse the ID from the URL
+	uuid, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	// Parse JSON request body into a map
+	var partialContactAddress map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&partialContactAddress); err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	// Update the contactAddres with the provided ID
+	var updatedContactAddress models.ContactAddress
+	result := Database.Model(&updatedContactAddress).Where("id = ?", uuid).Updates(partialContactAddress)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
+	}
+
+	// Set status code to 200 and return the updated contactAddr
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(updatedContactAddress)
+}
+
+// Handler function to handle DELETE requests to /ContactAddress endpoint
 func DeleteContactAddress(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		HandleError(w, errors.New("method not allowed"))
 		return
 	}
 
 	if r.PathValue("id") == "" {
-		http.Error(w, "ID is required", http.StatusBadRequest)
+		HandleError(w, errors.New("id is required"))
 		return
 	}
 
 	uuid, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		HandleError(w, err)
 		return
 	}
 
-	// Remove the last addr from the addrs slice
-	for i, contactAddr := range ContactAddrs {
-		if contactAddr.ID == uuid {
-			ContactAddrs = append(ContactAddrs[:i], ContactAddrs[i+1:]...)
-
-			// Set status code to 204 (No Content)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+	// Remove the contactAddres with the provided ID
+	result := Database.Delete(&models.ContactAddress{}, uuid)
+	if result.RowsAffected == 0 {
+		HandleError(w, result.Error)
+		return
 	}
 
-	// Set status code to 404 (Not Found)
-	w.WriteHeader(http.StatusNotFound)
+	// Set status code to 204 (No Content)
+	w.WriteHeader(http.StatusNoContent)
 }
