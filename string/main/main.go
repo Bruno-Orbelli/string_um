@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	dapi "string_um/string/client/database-api"
+	dapi "string_um/string/client/debug-api"
 
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -69,8 +69,6 @@ func createOwnUserIfNotExists(config flags.Config) (*models.OwnUser, *models.Con
 		if err != nil {
 			return nil, nil, err
 		}
-		/* stringKey := string(marshalledKey)
-		fmt.Println("Private key:", stringKey) */
 
 		// Get peer ID from private key
 		id, err := peer.IDFromPrivateKey(priv)
@@ -92,11 +90,6 @@ func createOwnUserIfNotExists(config flags.Config) (*models.OwnUser, *models.Con
 		// POST own user
 		resp, err = http.Post("http://localhost:3000/ownUser/create", "application/json", bytes.NewReader(ownUserJSON))
 		if err != nil || resp.StatusCode != http.StatusCreated {
-			bytes, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, nil, err
-			}
-			fmt.Println(string(bytes))
 			return nil, nil, errors.New("failed to create own user")
 		}
 
@@ -180,8 +173,6 @@ func main() {
 			panic(err)
 		}
 
-		fmt.Println("Contact added.")
-
 		var destContact models.Contact
 		var chat models.Chat
 
@@ -194,23 +185,18 @@ func main() {
 			panic(err)
 		}
 
-		fmt.Println("Contact found:", destContact)
-
 		// Get chat with contact.
 		resp, err = http.Get(fmt.Sprintf("http://localhost:3000/chats?contact_id=%s", destContact.ID))
 		if err != nil || resp.StatusCode != http.StatusOK {
 			panic(errors.New("unexpected error or status code: " + resp.Status))
 		}
-		fmt.Println("Chat found.")
 		respBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println("Chat found 2.")
-		if string(respBytes) == "" {
+		if string(respBytes) == "[]\n" {
 			fmt.Printf("Creating new chat with %s.\n", destContact.Name)
 			chat = models.Chat{
-				ID:        uuid.New(),
 				ContactID: destContact.ID,
 			}
 			chatJSON, err := json.Marshal(chat)
@@ -221,12 +207,15 @@ func main() {
 			if err != nil || resp.StatusCode != http.StatusCreated {
 				panic(err)
 			}
-		} else if resp.StatusCode != http.StatusOK {
-			panic(errors.New("unexpected status code: " + resp.Status))
-		} else {
-			if err = json.NewDecoder(resp.Body).Decode(&chat); err != nil {
+			respBytes, err = io.ReadAll(resp.Body)
+			if err != nil {
 				panic(err)
 			}
+		} else if resp.StatusCode != http.StatusOK {
+			panic(errors.New("unexpected status code: " + resp.Status))
+		}
+		if err = json.NewDecoder(bytes.NewReader(respBytes)).Decode(&chat); err != nil {
+			panic(err)
 		}
 
 		message := models.Message{
@@ -246,8 +235,6 @@ func main() {
 		if err != nil || resp.StatusCode != http.StatusCreated {
 			panic(err)
 		}
-
-		fmt.Println("Message added to be sent.")
 
 		/* if config.PeerID != "" {
 			fmt.Println("Trying to find peer...")

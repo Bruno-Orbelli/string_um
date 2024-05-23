@@ -1,4 +1,4 @@
-package database_api
+package debug_api
 
 import (
 	"encoding/json"
@@ -26,21 +26,17 @@ func GetContactAddresses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Marshal the query parameters into a ContactAddress struct
-	jsonContactAddress, err := json.Marshal(params)
-	if err != nil {
-		HandleError(w, err)
-		return
-	}
-	var contactAddr models.ContactAddress
-	if err := json.Unmarshal(jsonContactAddress, &contactAddr); err != nil {
-		HandleError(w, err)
-		return
+	// Build the filter conditions based on the query parameters
+	filter := make(map[string]interface{})
+	for key, values := range params {
+		if len(values) > 0 {
+			filter[key] = values[0]
+		}
 	}
 
 	// Filter the ContactAddress entity based on the query parameters
 	var filteredContactAddresses []models.ContactAddress
-	result := Database.Where(contactAddr).Find(&filteredContactAddresses)
+	result := Database.Where(filter).Find(&filteredContactAddresses)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return

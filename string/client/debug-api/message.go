@@ -1,4 +1,4 @@
-package database_api
+package debug_api
 
 import (
 	"encoding/json"
@@ -26,21 +26,17 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Marshal the query parameters into a Message struct
-	jsonMessage, err := json.Marshal(params)
-	if err != nil {
-		HandleError(w, err)
-		return
-	}
-	var message models.Message
-	if err := json.Unmarshal(jsonMessage, &message); err != nil {
-		HandleError(w, err)
-		return
+	// Build the filter conditions based on the query parameters
+	filter := make(map[string]interface{})
+	for key, values := range params {
+		if len(values) > 0 {
+			filter[key] = values[0]
+		}
 	}
 
-	// Filter the Messages slice based on the query parameters
+	// Filter the Messages based on the query parameters
 	var filteredMessages []models.Message
-	result := Database.Where(message).Find(&filteredMessages)
+	result := Database.Where(filter).Find(&filteredMessages)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return

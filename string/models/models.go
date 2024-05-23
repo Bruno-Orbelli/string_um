@@ -17,7 +17,6 @@ type Contact struct {
 	Name             string           `gorm:"type:string;not null" json:"name"`
 	ContactAddresses []ContactAddress `gorm:"foreignKey:ContactID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"contactAddresses"`
 	Chat             Chat             `gorm:"foreignKey:ContactID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"chat"`
-	Messages         []Message        `gorm:"foreignKey:SentByID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"messages"`
 }
 
 type ContactAddress struct {

@@ -1,4 +1,4 @@
-package database_api
+package debug_api
 
 import (
 	"encoding/json"
@@ -26,21 +26,17 @@ func GetChats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Marshal the query parameters into a Chat struct
-	jsonChat, err := json.Marshal(params)
-	if err != nil {
-		HandleError(w, err)
-		return
-	}
-	var chat models.Chat
-	if err := json.Unmarshal(jsonChat, &chat); err != nil {
-		HandleError(w, err)
-		return
+	// Build the filter conditions based on the query parameters
+	filter := make(map[string]interface{})
+	for key, values := range params {
+		if len(values) > 0 {
+			filter[key] = values[0]
+		}
 	}
 
 	// Filter the Chats slice based on the query parameters
 	var filteredChats []models.Chat
-	result := Database.Where(chat).Find(&filteredChats)
+	result := Database.Where(filter).Find(&filteredChats)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return
@@ -95,8 +91,10 @@ func CreateChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate a new UUID for the chat
-	newChat.ID = uuid.New()
+	// Generate a new UUID for the chat if not provided
+	if newChat.ID == uuid.Nil {
+		newChat.ID = uuid.New()
+	}
 
 	// Add the new chat to the database
 	result := Database.Create(&newChat)

@@ -42,7 +42,6 @@ func handleStream(stream network.Stream) {
 }
 
 func unmarshallMessage(str string) (*models.Message, error) {
-	fmt.Println("The problem lies here (unmarshallMessage).")
 	var message models.Message
 	err := json.Unmarshal([]byte(str), &message)
 	if err != nil {
@@ -52,7 +51,6 @@ func unmarshallMessage(str string) (*models.Message, error) {
 }
 
 func alterAndSaveMessage(message models.Message) {
-	fmt.Println("The problem lies here (alterAndSaveMessage).")
 	// Alter message to appear as sent
 	message.AlreadySent = true
 
@@ -78,7 +76,6 @@ func alterAndSaveMessage(message models.Message) {
 func readMessage(r *bufio.Reader) {
 	for i := 0; i < 5; i++ {
 		str, err := r.ReadString('\n')
-		fmt.Println(str)
 		if err != nil {
 			fmt.Printf("Failed to read message, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
 			time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
@@ -88,20 +85,19 @@ func readMessage(r *bufio.Reader) {
 			return
 		}
 		if str != "\n" {
-			msg, err := unmarshallMessage(str)
+			message, err := unmarshallMessage(str)
 			if err != nil {
 				fmt.Println("Failed to unmarshal message.")
 				return
 			}
-			openNewChatIfNotExists(msg.SentByID)
-			alterAndSaveMessage(*msg)
+			openNewChatIfNotExists(message.ChatID, message.SentByID)
+			alterAndSaveMessage(*message)
 		}
 		break
 	}
 }
 
 func writeMessage(w *bufio.Writer, message models.Message) error {
-	fmt.Println("The problem lies here (writeMessage).")
 	for i := 0; i < 5; i++ {
 		if err := json.NewEncoder(w).Encode(message); err != nil {
 			fmt.Printf("Failed to write message, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
@@ -125,28 +121,21 @@ func writeMessage(w *bufio.Writer, message models.Message) error {
 }
 
 func checkUnsentMessagesAndSend(ctx context.Context, host host.Host) {
-	fmt.Println("The problem lies here (checkUnsentMessagesAndSend).")
 	for {
 		time.Sleep(time.Second * 5)
 
-		fmt.Println("0")
-
-		resp, err := http.Get("http://localhost:3000/messages?already_sent=false")
+		resp, err := http.Get("http://localhost:3000/messages?already_sent=0")
 		if err != nil || resp.StatusCode != 200 {
 			fmt.Println("Failed to get unsent messages, retrying in 15 seconds.")
 			time.Sleep(time.Second * 15)
 			continue
 		}
 
-		fmt.Println("1")
-
 		var unsentMessages []models.Message
 		if err = json.NewDecoder(resp.Body).Decode(&unsentMessages); err != nil {
 			fmt.Println("Failed to decode unsent messages.")
 			continue
 		}
-
-		fmt.Println("2")
 
 		for _, message := range unsentMessages {
 			// Check if chat is open in node
@@ -175,8 +164,6 @@ func checkUnsentMessagesAndSend(ctx context.Context, host host.Host) {
 				continue
 			}
 
-			fmt.Println("3")
-
 			for _, contactAddr := range contactAddrs {
 				potencialMa, err := ma.NewMultiaddr(fmt.Sprintf("%s/p2p/%s", contactAddr.ObservedAddress, contactAddr.ContactID))
 				if err != nil {
@@ -204,10 +191,8 @@ func checkUnsentMessagesAndSend(ctx context.Context, host host.Host) {
 					continue
 				}
 
-				fmt.Println("4")
-
 				// Mark message as sent
-				req, err := http.NewRequest("PUT", fmt.Sprintf("http://localhost:3000/messages/update/%s", message.ID), strings.NewReader(`{"alreadySent": true}`))
+				req, err := http.NewRequest("PUT", fmt.Sprintf("http://localhost:3000/messages/update/%s", message.ID), strings.NewReader(`{"already_sent": true}`))
 				if err != nil {
 					fmt.Println("Couldn't create request to mark message as sent.")
 					break // TODO: Ensure message gets marked
@@ -215,14 +200,14 @@ func checkUnsentMessagesAndSend(ctx context.Context, host host.Host) {
 				req.Header.Set("Content-Type", "application/json")
 				for i := 0; i < 6; i++ {
 					resp, err := http.DefaultClient.Do(req)
-					if err != nil || resp.StatusCode != 204 {
+					if err != nil || resp.StatusCode != 200 {
 						fmt.Printf("Failed to mark message as sent, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
 						time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
 						continue
 					}
 					break
 				}
-				fmt.Println("5")
+
 				break
 			}
 		}
@@ -230,27 +215,6 @@ func checkUnsentMessagesAndSend(ctx context.Context, host host.Host) {
 }
 
 func connectToPeer(ctx context.Context, host host.Host, peerMa ma.Multiaddr) error {
-	fmt.Println("The problem lies here (connectToPeer).")
-	/* decodedPeerID, err := peer.Decode(peerID)
-	if err != nil {
-		return errors.New("couldn't decode PeerID")
-	}
-
-	for i := 0; i < 5; i++ {
-		if len(host.Peerstore().PeerInfo(decodedPeerID).Addrs) == 0 {
-			fmt.Printf("Failed to get an address at Peerstore, retrying after %f seconds.\n", math.Pow(float64(i+1), 2))
-			time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
-			if i == 4 {
-				continue
-			} else {
-				return errors.New("couldn't get an address for Peer")
-			}
-		}
-		break
-	}
-
-	fmt.Println("Found address, attempting connection.") */
-
 	addrInfo, err := peer.AddrInfoFromP2pAddr(peerMa)
 	if err != nil {
 		return errors.New("couldn't get AddrInfo from the provided multiaddress")
@@ -274,7 +238,6 @@ func connectToPeer(ctx context.Context, host host.Host, peerMa ma.Multiaddr) err
 }
 
 func openStreamToPeer(ctx context.Context, host host.Host, peerId peer.ID) (*bufio.Writer, error) {
-	fmt.Println("The problem lies here (openStreamToPeer).")
 	if host.Network().ConnsToPeer(peerId) != nil {
 		// Open a stream with the given peer.
 		s, err := host.NewStream(ctx, peerId, "/chat/0.0.1")
@@ -408,7 +371,6 @@ func AddKnownAddressesForContact(host host.Host, contactID string) error {
 		for i := 0; i < 5; i++ {
 			resp, err := http.Post("http://localhost:3000/contactAddresses/create", "application/json", bytes.NewReader(newAddrJSON))
 			if err != nil || resp.StatusCode != 201 {
-				fmt.Println(resp.StatusCode)
 				fmt.Printf("Failed to save contact address, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
 				if i > 4 {
 					time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
@@ -555,19 +517,17 @@ func saveContactIfNotExists(contactID string) (*models.Contact, error) {
 	}
 }
 
-func openNewChatIfNotExists(contactID string) error {
-	fmt.Println("Here we are ok.")
+func openNewChatIfNotExists(chatID uuid.UUID, contactID string) error {
 	contact, err := saveContactIfNotExists(contactID)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Here too.")
 	// Check if chat already exists
 	var resp *http.Response
 	for i := 0; i < 6; i++ {
-		resp, err = http.Get(fmt.Sprintf("http://localhost:3000/chats?contact_id=%s", contactID))
-		if err != nil || resp.StatusCode != 200 {
+		resp, err = http.Get(fmt.Sprintf("http://localhost:3000/chats/%s", chatID))
+		if err != nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound) {
 			fmt.Println("Failed to get chats, retrying in 15 seconds.")
 			time.Sleep(time.Second * 15)
 			if i < 5 {
@@ -578,20 +538,16 @@ func openNewChatIfNotExists(contactID string) error {
 		}
 		break
 	}
-	fmt.Println("What about here?")
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("And here?")
 	// If chat doesn't exist, create it
-	if string(respBytes) == "null\n" {
+	if resp.StatusCode == http.StatusNotFound {
 		fmt.Printf("Creating new chat with %s.\n", contact.Name)
 		chat := models.Chat{
-			// This creates a different UUID than the one the same chat would have in the other peer's database
-			// TODO: Get the other peer's chat ID
-			ID:        uuid.New(),
+			ID:        chatID,
 			ContactID: contact.ID,
 		}
 		chatJSON, err := json.Marshal(chat)
@@ -609,6 +565,15 @@ func openNewChatIfNotExists(contactID string) error {
 					return errors.New("couldn't create chat")
 				}
 			}
+			break
+		}
+	} else { // Check if chat with chatID is associated with the provided contactID
+		var chat models.Chat
+		if err = json.Unmarshal(respBytes, &chat); err != nil {
+			return err
+		}
+		if chat.ContactID != contactID {
+			return errors.New("chat mismatch: chat already exists but is associated with another contact") // In theory, this should never happen due to UUIDs being unique
 		}
 	}
 

@@ -1,4 +1,4 @@
-package database_api
+package debug_api
 
 import (
 	"encoding/json"
