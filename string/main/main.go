@@ -1,14 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"main/flags"
-	"net/http"
 	"os"
 	"os/signal"
 	"string_um/string/models"
@@ -16,116 +12,98 @@ import (
 	"syscall"
 	"time"
 
-	dapi "string_um/string/client/debug-api"
+	debug_api "string_um/string/client/debug-api"
+	prod_api "string_um/string/client/prod-api"
 
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"gorm.io/gorm"
 )
 
-func createOwnUserIfNotExists(config flags.Config) (*models.OwnUser, *models.Contact, error) {
-	// Check if own user exists
-	resp, err := http.Get("http://localhost:3000/ownUser")
+func createOwnUser(password string) (*models.OwnUser, *models.Contact, error) {
+	fmt.Println("Creating own user...")
+
+	// Generate private key
+	priv, _, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer resp.Body.Close()
 
-	switch resp.StatusCode {
-	case http.StatusOK:
-		// Own user exists, decode response
-		var ownUser models.OwnUser
-		if err := json.NewDecoder(resp.Body).Decode(&ownUser); err != nil {
-			return nil, nil, err
-		}
+	// Marshal private key to bytes
+	marshalledKey, err := crypto.MarshalPrivateKey(priv)
+	if err != nil {
+		return nil, nil, err
+	}
 
+	// Get peer ID from private key
+	id, err := peer.IDFromPrivateKey(priv)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Create own user
+	ownUser := models.OwnUser{
+		ID:         id.String(),
+		Password:   password,
+		PrivateKey: marshalledKey,
+	}
+
+	// Persist own user
+	createdOwnUser, err := prod_api.CreateOwnUser(ownUser)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create own user: %w", err)
+	}
+
+	// Create own user contact
+	ownUserContact := models.Contact{
+		ID:   createdOwnUser.ID,
+		Name: "Me",
+	}
+
+	// Persist own user contact
+	createdOwnContact, err := prod_api.CreateContact(ownUserContact)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create own user contact: %w", err)
+	}
+
+	return createdOwnUser, createdOwnContact, nil
+}
+
+func getOwnUserIfExists(config flags.Config) (*models.OwnUser, *models.Contact, error) {
+	// Check if own user exists
+	ownUser, err := prod_api.GetOwnUser()
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil, err
+	}
+
+	if ownUser != nil { // Own user exists
 		// Retrieve own user contact
-		resp, err = http.Get("http://localhost:3000/contacts?name=Me")
+		ownUserContact, err := prod_api.GetContact(ownUser.ID)
 		if err != nil {
 			return nil, nil, err
 		}
-		defer resp.Body.Close()
-
-		var ownUserContact models.Contact
-		if err := json.NewDecoder(resp.Body).Decode(&ownUserContact); err != nil {
-			return nil, nil, err
-		}
-
-		return &ownUser, &ownUserContact, nil
-
-	case http.StatusNotFound:
-		fmt.Println("Creating own user...")
-
-		// Generate private key
-		priv, _, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Marshal private key to bytes
-		marshalledKey, err := crypto.MarshalPrivateKey(priv)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Get peer ID from private key
-		id, err := peer.IDFromPrivateKey(priv)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Create own user
-		ownUser := models.OwnUser{
-			ID:         id.String(),
-			Password:   config.Password,
-			PrivateKey: marshalledKey,
-		}
-		ownUserJSON, err := json.Marshal(ownUser)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// POST own user
-		resp, err = http.Post("http://localhost:3000/ownUser/create", "application/json", bytes.NewReader(ownUserJSON))
-		if err != nil || resp.StatusCode != http.StatusCreated {
-			return nil, nil, errors.New("failed to create own user")
-		}
-
-		// Create own user contact
-		ownUserContact := models.Contact{
-			ID:   ownUser.ID,
-			Name: "Me",
-		}
-		ownUserContactJSON, err := json.Marshal(ownUserContact)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// POST own user contact
-		resp, err = http.Post("http://localhost:3000/contacts/create", "application/json", bytes.NewReader(ownUserContactJSON))
-		if err != nil || resp.StatusCode != http.StatusCreated {
-			return nil, nil, errors.New("failed to create own user contact")
-		}
-
-		return &ownUser, &ownUserContact, nil
-
-	default:
-		return nil, nil, errors.New("unexpected status code: " + resp.Status)
+		return ownUser, ownUserContact, nil
+	} else { // Own user does not exist
+		return createOwnUser(config.Password)
 	}
 }
 
 func main() {
-	// Create a new API server.
-	go dapi.RunDatabaseAPI()
-	time.Sleep(1 * time.Second)
-
 	// Parse the command line arguments.
 	config, err := flags.ParseFlags()
 	if err != nil {
 		panic(err)
 	}
+
+	// Run APIs according to config.
+	go prod_api.RunDatabaseAPI()
+	if config.Debug {
+		go debug_api.RunDatabaseAPI()
+	}
+	time.Sleep(1 * time.Second)
 
 	// The context governs the lifetime of the libp2p node.
 	// Cancelling it will stop the host.
@@ -133,8 +111,8 @@ func main() {
 	ctx = network.WithUseTransient(ctx, "relay info")
 	defer cancel()
 
-	// Create own user if not exists.
-	ownUser, ownUserContact, err := createOwnUserIfNotExists(config)
+	// Get own user, create if not exists.
+	ownUser, ownUserContact, err := getOwnUserIfExists(config)
 	if err != nil {
 		panic(err)
 	}
@@ -159,7 +137,6 @@ func main() {
 	defer host.Close()
 
 	// Set user ID and contact ID.
-
 	hostinfo := peer.AddrInfo{
 		ID:    host.ID(),
 		Addrs: host.Addrs(),
@@ -173,49 +150,37 @@ func main() {
 			panic(err)
 		}
 
-		var destContact models.Contact
-		var chat models.Chat
+		var destContact *models.Contact
+		var chats []models.Chat
 
 		// Get contact to send message to.
-		resp, err := http.Get(fmt.Sprintf("http://localhost:3000/contacts/%s", config.PeerID))
-		if err != nil || resp.StatusCode != http.StatusOK {
-			panic(errors.New("unexpected error or status code: " + resp.Status))
-		}
-		if err = json.NewDecoder(resp.Body).Decode(&destContact); err != nil {
-			panic(err)
+		destContact, err = prod_api.GetContact(config.PeerID)
+		if err != nil {
+			panic("failed to get contact: " + err.Error())
 		}
 
 		// Get chat with contact.
-		resp, err = http.Get(fmt.Sprintf("http://localhost:3000/chats?contact_id=%s", destContact.ID))
-		if err != nil || resp.StatusCode != http.StatusOK {
-			panic(errors.New("unexpected error or status code: " + resp.Status))
-		}
-		respBytes, err := io.ReadAll(resp.Body)
+		params := map[string]interface{}{"contact_id": destContact.ID}
+		chats, err = prod_api.GetChats(params)
 		if err != nil {
-			panic(err)
+			panic("failed to get chats: " + err.Error())
 		}
-		if string(respBytes) == "[]\n" {
+
+		var chat models.Chat
+		if len(chats) > 1 { // Unexpected number of chats, this should not happen.
+			panic(errors.New("fatal: unexpected number of chats for single contact: " + destContact.Name))
+		} else if len(chats) == 0 { // Chat does not exist, create it.
 			fmt.Printf("Creating new chat with %s.\n", destContact.Name)
 			chat = models.Chat{
 				ContactID: destContact.ID,
 			}
-			chatJSON, err := json.Marshal(chat)
+			createdChat, err := prod_api.CreateChat(chat)
 			if err != nil {
-				panic(err)
+				panic("failed to create chat: " + err.Error())
 			}
-			resp, err = http.Post("http://localhost:3000/chats/create", "application/json", bytes.NewReader(chatJSON))
-			if err != nil || resp.StatusCode != http.StatusCreated {
-				panic(err)
-			}
-			respBytes, err = io.ReadAll(resp.Body)
-			if err != nil {
-				panic(err)
-			}
-		} else if resp.StatusCode != http.StatusOK {
-			panic(errors.New("unexpected status code: " + resp.Status))
-		}
-		if err = json.NewDecoder(bytes.NewReader(respBytes)).Decode(&chat); err != nil {
-			panic(err)
+			chat = *createdChat
+		} else { // Chat exists, use it.
+			chat = chats[0]
 		}
 
 		message := models.Message{
@@ -226,15 +191,12 @@ func main() {
 			SentAt:      time.Now(),
 			Message:     "Hello, world!",
 		}
-		messageJSON, err := json.Marshal(message)
+		createdMessage, err := prod_api.CreateMessage(message)
 		if err != nil {
-			panic(err)
+			panic("failed to create message: " + err.Error())
 		}
 
-		resp, err = http.Post("http://localhost:3000/messages/create", "application/json", bytes.NewReader(messageJSON))
-		if err != nil || resp.StatusCode != http.StatusCreated {
-			panic(err)
-		}
+		fmt.Printf("Created message with ID=%s.\n", createdMessage.ID)
 
 		/* if config.PeerID != "" {
 			fmt.Println("Trying to find peer...")

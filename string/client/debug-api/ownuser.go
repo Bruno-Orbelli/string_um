@@ -105,13 +105,8 @@ func DeleteOwnUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.PathValue("id") == "" {
-		HandleError(w, errors.New("id is required"))
-		return
-	}
-
-	// Remove the ownUser with the provided ID
-	result := Database.Delete(&models.OwnUser{}, r.PathValue("id"))
+	// Remove ownUser
+	result := Database.Delete(&models.OwnUser{})
 	if result.RowsAffected == 0 {
 		HandleError(w, result.Error)
 		return

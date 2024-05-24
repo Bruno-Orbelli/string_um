@@ -66,6 +66,6 @@ func RunDatabaseAPI() {
 		panic(fmt.Sprintf("Failed to auto-migrate database: %v", err))
 	}
 
-	fmt.Println("Database API running on port 3000")
+	fmt.Println("Database debug API running on port 3000.")
 	http.ListenAndServe(":3000", mux)
 }
