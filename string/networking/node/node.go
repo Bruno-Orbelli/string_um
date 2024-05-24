@@ -2,17 +2,14 @@ package node
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
-	"strings"
 	"time"
 
+	prod_api "string_um/string/client/prod-api"
 	"string_um/string/main/flags"
 	"string_um/string/models"
 	boots "string_um/string/networking/bootstrap"
@@ -26,6 +23,7 @@ import (
 	discovery "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	ma "github.com/multiformats/go-multiaddr"
+	"gorm.io/gorm"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -53,23 +51,8 @@ func unmarshallMessage(str string) (*models.Message, error) {
 func alterAndSaveMessage(message models.Message) {
 	// Alter message to appear as sent
 	message.AlreadySent = true
-
-	messageJSON, err := json.Marshal(message)
-	if err != nil {
-		fmt.Println("Failed to marshal message.")
-		return
-	}
-
-	reader := strings.NewReader(string(messageJSON))
-	fmt.Println(string(messageJSON))
-	for i := 0; i < 5; i++ {
-		resp, err := http.Post("http://localhost:3000/messages/create", "application/json", reader)
-		if err != nil || resp.StatusCode != 201 {
-			fmt.Printf("Failed to save message, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
-			time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
-			continue
-		}
-		break
+	if _, err := prod_api.CreateMessage(message); err != nil {
+		fmt.Printf("Failed to save message: %s.\n", err)
 	}
 }
 
@@ -123,48 +106,34 @@ func writeMessage(w *bufio.Writer, message models.Message) error {
 func checkUnsentMessagesAndSend(ctx context.Context, host host.Host) {
 	for {
 		time.Sleep(time.Second * 5)
-
-		resp, err := http.Get("http://localhost:3000/messages?already_sent=0")
-		if err != nil || resp.StatusCode != 200 {
-			fmt.Println("Failed to get unsent messages, retrying in 15 seconds.")
+		params := map[string]interface{}{"already_sent": "0"}
+		unsentMessages, err := prod_api.GetMessages(params)
+		if err != nil {
+			fmt.Printf("Failed to get unsent messages: %s\n. Retrying in 15 seconds.", err)
 			time.Sleep(time.Second * 15)
-			continue
-		}
-
-		var unsentMessages []models.Message
-		if err = json.NewDecoder(resp.Body).Decode(&unsentMessages); err != nil {
-			fmt.Println("Failed to decode unsent messages.")
 			continue
 		}
 
 		for _, message := range unsentMessages {
 			// Check if chat is open in node
-			resp, err := http.Get(fmt.Sprintf("http://localhost:3000/chats/%s", message.ChatID))
-			if err != nil || resp.StatusCode != 200 {
-				fmt.Println("Failed to get chat, retrying in 15 seconds.")
+			chat, err := prod_api.GetChat(message.ChatID)
+			if err != nil {
+				fmt.Printf("Failed to get chat: %s\n. Retrying in 15 seconds.", err)
 				time.Sleep(time.Second * 15)
 				continue
 			}
-			var chat models.Chat
-			if err = json.NewDecoder(resp.Body).Decode(&chat); err != nil {
-				fmt.Println("Failed to decode chat.")
-				continue
-			}
-			contactID := chat.ContactID
-			resp, err = http.Get(fmt.Sprintf("http://localhost:3000/contactAddresses?contact_id=%s", contactID))
-			if err != nil || resp.StatusCode != 200 {
-				fmt.Println("Failed to get contact addresses, retrying in 15 seconds.")
+
+			// Get contact addresses for contact
+			params = map[string]interface{}{"contact_id": chat.ContactID}
+			contactAddrs, err := prod_api.GetContactAddresses(params)
+			if err != nil {
+				fmt.Printf("Failed to get contactAddresses for %s: %s\n. Retrying in 15 seconds.", chat.ContactID, err)
 				time.Sleep(time.Second * 15)
 				continue // TODO: Try to resend the same message
 			}
 
-			var contactAddrs []models.ContactAddress
-			if err = json.NewDecoder(resp.Body).Decode(&contactAddrs); err != nil {
-				fmt.Println("Failed to decode contact addresses.")
-				continue
-			}
-
 			for _, contactAddr := range contactAddrs {
+				// Connect to peer
 				potencialMa, err := ma.NewMultiaddr(fmt.Sprintf("%s/p2p/%s", contactAddr.ObservedAddress, contactAddr.ContactID))
 				if err != nil {
 					fmt.Println("Error when trying to convert multiaddress, getting another.")
@@ -175,8 +144,8 @@ func checkUnsentMessagesAndSend(ctx context.Context, host host.Host) {
 					continue
 				}
 
+				// Open stream to peer
 				contactID, err := peer.Decode(contactAddr.ContactID)
-
 				if err != nil {
 					fmt.Println("Couldn't decode ContactID, trying another multiaddress.")
 					continue
@@ -186,26 +155,18 @@ func checkUnsentMessagesAndSend(ctx context.Context, host host.Host) {
 					fmt.Printf("Couldn't open stream to peer: %s. Trying another multiaddress.\n", err)
 					continue
 				}
+
+				// Write message to peer
 				if err := writeMessage(bufio.NewWriter(s), message); err != nil {
 					fmt.Printf("Couldn't write message to peer: %s. Trying another multiaddress.\n", err)
 					continue
 				}
 
 				// Mark message as sent
-				req, err := http.NewRequest("PUT", fmt.Sprintf("http://localhost:3000/messages/update/%s", message.ID), strings.NewReader(`{"already_sent": true}`))
-				if err != nil {
-					fmt.Println("Couldn't create request to mark message as sent.")
-					break // TODO: Ensure message gets marked
-				}
-				req.Header.Set("Content-Type", "application/json")
-				for i := 0; i < 6; i++ {
-					resp, err := http.DefaultClient.Do(req)
-					if err != nil || resp.StatusCode != 200 {
-						fmt.Printf("Failed to mark message as sent, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
-						time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
-						continue
-					}
-					break
+				params = map[string]interface{}{"already_sent": true}
+				if _, err := prod_api.UpdateMessage(message.ID, params); err != nil {
+					fmt.Printf("Couldn't mark message %s as sent: %s. Trying another multiaddress.\n", message.ID, err)
+					continue
 				}
 
 				break
@@ -364,14 +325,10 @@ func AddKnownAddressesForContact(host host.Host, contactID string) error {
 			ObservedAddress: addr.String(),
 			ObservedAt:      time.Now(),
 		}
-		newAddrJSON, err := json.Marshal(newAddr)
-		if err != nil {
-			return errors.New("couldn't marshal contact address to JSON")
-		}
 		for i := 0; i < 5; i++ {
-			resp, err := http.Post("http://localhost:3000/contactAddresses/create", "application/json", bytes.NewReader(newAddrJSON))
-			if err != nil || resp.StatusCode != 201 {
-				fmt.Printf("Failed to save contact address, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
+			createdAddr, err := prod_api.CreateContactAddress(newAddr)
+			if err != nil {
+				fmt.Printf("Failed to save contact address: %s. Retrying after %f second/s.\n", createdAddr, math.Pow(float64(i+1), 2))
 				if i > 4 {
 					time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
 					continue
@@ -395,9 +352,9 @@ func AddNewContact(host host.Host, contactID string, contactName string) error {
 
 	// Check if the contact already exists or has default name
 	for i := 0; i < 6; i++ {
-		resp, err := http.Get(fmt.Sprintf("http://localhost:3000/contacts/%s", contactID))
-		if err != nil {
-			fmt.Printf("Failed to get contact, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
+		contact, err := prod_api.GetContact(contactID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			fmt.Printf("Failed to get contact: %s. Retrying after %f second/s.\n", err, math.Pow(float64(i+1), 2))
 			time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
 			if i < 5 {
 				continue
@@ -405,102 +362,65 @@ func AddNewContact(host host.Host, contactID string, contactName string) error {
 				return errors.New("couldn't get contact")
 			}
 		}
-		switch resp.StatusCode {
-		case 200:
-			{
-				var contact models.Contact
-				json.NewDecoder(resp.Body).Decode(&contact)
-				if contact.Name == contactID {
-					// Contact already exists with default name
-					req, err := http.NewRequest(
-						"PUT",
-						fmt.Sprintf("http://localhost:3000/contacts/update/%s", contactID),
-						strings.NewReader(fmt.Sprintf(`{"name": "%s"}`, contactName)),
-					)
-					if err != nil {
-						return err
-					}
-					resp.Header.Set("Content-Type", "application/json")
-					for i := 0; i < 6; i++ {
-						resp, err = http.DefaultClient.Do(req)
-						if err != nil || resp.StatusCode != 200 {
-							fmt.Printf("Failed to update contact, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
-							time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
-							if i < 5 {
-								continue
-							} else {
-								return errors.New("couldn't update contact")
-							}
-						}
-						break
+		// Conditions to add or update contact
+		if contact == nil { // Add the contact to the database
+			newContact := models.Contact{
+				ID:   decodedContactID.String(),
+				Name: contactName,
+			}
+			for i := 0; i < 5; i++ {
+				_, err := prod_api.CreateContact(newContact)
+				if err != nil {
+					fmt.Printf("Failed to save contact, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
+					if i > 4 {
+						time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
+						continue
+					} else {
+						return errors.New("couldn't save contact")
 					}
 				}
-				// Contact now exists with custom name or has been updated
+				break
+			}
+		} else if contact.Name == contactID { // Contact already exists with default name
+			params := map[string]interface{}{"name": contactName}
+			for i := 0; i < 6; i++ {
+				if _, err := prod_api.UpdateContact(contactID, params); err != nil {
+					fmt.Printf("Failed to update contact: %s. Retrying after %f second/s.\n", err, math.Pow(float64(i+1), 2))
+					time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
+					if i < 5 {
+						continue
+					} else {
+						return errors.New("couldn't update contact")
+					}
+				}
 				return nil
 			}
-		case 404:
-			{
-				// Add the contact to the database
-				newContact := models.Contact{
-					ID:   decodedContactID.String(),
-					Name: contactName,
-				}
-				newContactJSON, err := json.Marshal(newContact)
-				if err != nil {
-					return errors.New("couldn't marshal contact to JSON")
-				}
-				for i := 0; i < 5; i++ {
-					resp, err := http.Post("http://localhost:3000/contacts/create", "application/json", bytes.NewReader(newContactJSON))
-					if err != nil || resp.StatusCode != 201 {
-						fmt.Printf("Failed to save contact, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
-						if i > 4 {
-							time.Sleep(time.Duration(math.Pow(float64(i+1), 2)) * time.Second)
-							continue
-						} else {
-							return errors.New("couldn't save contact")
-						}
-					}
-					break
-				}
-
-				err = AddKnownAddressesForContact(host, contactID)
-				return err
-			}
-		default:
-			{
-				return errors.New("unexpected status code: " + resp.Status)
-			}
 		}
+		err = AddKnownAddressesForContact(host, contactID)
+		return err // Contact now exists with custom name or has been updated
 	}
-	return nil
+	return nil // Contact now exists with custom name or has been updated
 }
 
 func saveContactIfNotExists(contactID string) (*models.Contact, error) {
 	// TODO: Better error handling
 	// Check if contact exists
-	resp, err := http.Get(fmt.Sprintf("http://localhost:3000/contacts/%s", contactID))
-	if err != nil {
+	contact, err := prod_api.GetContact(contactID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 
-	if resp.StatusCode == 200 {
-		var contact models.Contact
-		json.NewDecoder(resp.Body).Decode(&contact)
-		return &contact, nil
-	} else if resp.StatusCode == 404 {
-		// Contact doesn't exist, create it
+	if contact != nil {
+		return contact, nil
+	} else { // Contact doesn't exist, create it
 		contact := models.Contact{
 			ID:   contactID,
 			Name: contactID,
 		}
-		contactJSON, err := json.Marshal(contact)
-		if err != nil {
-			return nil, err
-		}
 		for i := 0; i < 6; i++ {
-			resp, err = http.Post("http://localhost:3000/contacts/create", "application/json", bytes.NewReader(contactJSON))
-			if err != nil || resp.StatusCode != 201 {
-				fmt.Println("Failed to create contact, retrying in 15 seconds.")
+			createdContact, err := prod_api.CreateContact(contact)
+			if err != nil {
+				fmt.Printf("Failed to create contact: %s. Retrying in 15 seconds.\n", err)
 				time.Sleep(time.Second * 15)
 				if i < 5 {
 					continue
@@ -508,13 +428,10 @@ func saveContactIfNotExists(contactID string) (*models.Contact, error) {
 					return nil, errors.New("couldn't create contact")
 				}
 			}
-			break
+			return createdContact, nil
 		}
-		return &contact, nil
-
-	} else {
-		return nil, errors.New("unexpected status code: " + resp.Status)
 	}
+	return nil, errors.New("couldn't create contact")
 }
 
 func openNewChatIfNotExists(chatID uuid.UUID, contactID string) error {
@@ -524,11 +441,11 @@ func openNewChatIfNotExists(chatID uuid.UUID, contactID string) error {
 	}
 
 	// Check if chat already exists
-	var resp *http.Response
+	var chat *models.Chat
 	for i := 0; i < 6; i++ {
-		resp, err = http.Get(fmt.Sprintf("http://localhost:3000/chats/%s", chatID))
-		if err != nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound) {
-			fmt.Println("Failed to get chats, retrying in 15 seconds.")
+		chat, err = prod_api.GetChat(chatID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			fmt.Printf("Failed to get chat: %s, retrying in 15 seconds.\n", err)
 			time.Sleep(time.Second * 15)
 			if i < 5 {
 				continue
@@ -538,26 +455,19 @@ func openNewChatIfNotExists(chatID uuid.UUID, contactID string) error {
 		}
 		break
 	}
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
 
-	// If chat doesn't exist, create it
-	if resp.StatusCode == http.StatusNotFound {
+	if chat != nil && chat.ContactID != contactID { // Chat already exists but is associated with another contact
+		return errors.New("chat mismatch: chat already exists but is associated with another contact") // In theory, this should never happen due to UUIDs being unique
+	} else if chat == nil { // Chat doesn't exist, create it
 		fmt.Printf("Creating new chat with %s.\n", contact.Name)
 		chat := models.Chat{
 			ID:        chatID,
 			ContactID: contact.ID,
 		}
-		chatJSON, err := json.Marshal(chat)
-		if err != nil {
-			return err
-		}
 		for i := 0; i < 6; i++ {
-			resp, err = http.Post("http://localhost:3000/chats/create", "application/json", bytes.NewReader(chatJSON))
-			if err != nil || resp.StatusCode != 201 {
-				fmt.Println("Failed to create chat, retrying in 15 seconds.")
+			_, err = prod_api.CreateChat(chat)
+			if err != nil {
+				fmt.Printf("Failed to create chat: %s. Retrying in 15 seconds.\n", err)
 				time.Sleep(time.Second * 15)
 				if i < 5 {
 					continue
@@ -565,19 +475,10 @@ func openNewChatIfNotExists(chatID uuid.UUID, contactID string) error {
 					return errors.New("couldn't create chat")
 				}
 			}
-			break
-		}
-	} else { // Check if chat with chatID is associated with the provided contactID
-		var chat models.Chat
-		if err = json.Unmarshal(respBytes, &chat); err != nil {
-			return err
-		}
-		if chat.ContactID != contactID {
-			return errors.New("chat mismatch: chat already exists but is associated with another contact") // In theory, this should never happen due to UUIDs being unique
+			return nil
 		}
 	}
-
-	return nil
+	return nil // Chat already exists and is associated with the correct contact
 }
 
 func startLocalPeerDiscovery(host host.Host) {

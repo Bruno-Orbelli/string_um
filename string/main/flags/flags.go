@@ -45,6 +45,7 @@ type Config struct {
 	RelayAddresses  addrList
 	PeerID          string
 	ProtocolID      string
+	Debug           bool
 }
 
 func ParseFlags() (Config, error) {
@@ -55,6 +56,7 @@ func ParseFlags() (Config, error) {
 	flag.Var(&config.RelayAddresses, "relay", "Adds a relay multiaddress to the relay list")
 	flag.StringVar(&config.PeerID, "peer", "", "Sets a peer id to connect to")
 	flag.StringVar(&config.ProtocolID, "pid", "/chat/0.0.1", "Sets a protocol id for stream headers")
+	flag.BoolVar(&config.Debug, "debug", false, "Enables debug mode")
 	flag.Parse()
 
 	if len(config.BootstrapPeers) == 0 {
