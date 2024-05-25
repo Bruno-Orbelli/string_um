@@ -393,7 +393,6 @@ func AddNewContact(host host.Host, contactID string, contactName string) error {
 						return errors.New("couldn't update contact")
 					}
 				}
-				return nil
 			}
 		}
 		err = AddKnownAddressesForContact(host, contactID)
@@ -516,6 +515,10 @@ func (n *myNotifiee) Disconnected(_ network.Network, c network.Conn) {
 		nodeType = "peer"
 	}*/
 	fmt.Printf("Connection with %s (%s) has been terminated.\n", nodeType, c.RemotePeer())
+}
+
+func (n *myNotifiee) ListenClose(_ network.Network, mAddr ma.Multiaddr) {
+	fmt.Printf("Clossing listener at multiaddress %s.\n", mAddr)
 }
 
 func bootstrapHost(ctx context.Context, host host.Host, dhtInstance *dht.IpfsDHT, bootstrapPeers []peer.AddrInfo) error {

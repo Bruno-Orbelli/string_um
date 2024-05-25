@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"string_um/string/models"
 
+	_ "github.com/mattn/go-sqlite3"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -50,7 +51,10 @@ func getMux() *http.ServeMux {
 func RunDatabaseAPI() {
 	var err error
 	mux := getMux()
-	Database, err = gorm.Open(sqlite.Open("test.db"), &gorm.Config{TranslateError: true})
+	Database, err = gorm.Open(
+		sqlite.Open("test.db"),
+		&gorm.Config{TranslateError: true},
+	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to connect to database: %v", err))
 	}

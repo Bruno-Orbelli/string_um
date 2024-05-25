@@ -14,6 +14,7 @@ import (
 
 	debug_api "string_um/string/client/debug-api"
 	prod_api "string_um/string/client/prod-api"
+	"string_um/string/main/encryption"
 
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -98,6 +99,63 @@ func main() {
 		panic(err)
 	}
 
+	// Handle termination signals
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
+	// The context governs the lifetime of the libp2p node.
+	// Cancelling it will stop the host.
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = network.WithUseTransient(ctx, "relay info")
+
+	// Run the application in a goroutine
+	go func() {
+		// Defer the cancellation of the context to ensure it is always called
+		defer cancel()
+
+		// Handle termination signal
+		<-sigCh
+
+		// Cancel the context
+		cancel()
+		<-ctx.Done()
+	}()
+
+	// Run the application
+	if err := runApplication(ctx, config); err != nil {
+		fmt.Println("Error:", err)
+		os.Exit(1)
+	}
+
+	// Encrypt the database file and remove the decrypted file.
+	if err := encryption.EncryptFile("test.db", "en_test.db", config.Password, "en_salt.txt"); err != nil {
+		panic(err)
+	}
+	if err := os.Remove("test.db"); err != nil {
+		panic(err)
+	}
+}
+
+func runApplication(ctx context.Context, config flags.Config) error {
+	// Check if database file exists and
+	if _, err := os.Stat("en_test.db"); err != nil {
+		if os.IsNotExist(err) {
+			// Create the database file.
+			_, err := os.Create("en_test.db")
+			if err != nil {
+				return err
+			}
+			if err := encryption.EncryptFile("en_test.db", "en_test.db", config.Password, "en_salt.txt"); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	if err := encryption.DecryptFile("en_test.db", "test.db", config.Password, "en_salt.txt"); err != nil {
+		return err
+	}
+
 	// Run APIs according to config.
 	go prod_api.RunDatabaseAPI()
 	if config.Debug {
@@ -105,23 +163,17 @@ func main() {
 	}
 	time.Sleep(1 * time.Second)
 
-	// The context governs the lifetime of the libp2p node.
-	// Cancelling it will stop the host.
-	ctx, cancel := context.WithCancel(context.Background())
-	ctx = network.WithUseTransient(ctx, "relay info")
-	defer cancel()
-
 	// Get own user, create if not exists.
 	ownUser, ownUserContact, err := getOwnUserIfExists(config)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	// Create a new host.
 	fmt.Printf("Creating host with addresses: %s.\n", config.ListenAddresses)
 	unmarshalledKey, err := crypto.UnmarshalPrivateKey(ownUser.PrivateKey)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	host, _, err := node.CreateNewNode(
 		ctx,
@@ -132,7 +184,7 @@ func main() {
 		protocol.ConvertFromStrings([]string{config.ProtocolID})[0],
 	)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer host.Close()
 
@@ -147,7 +199,7 @@ func main() {
 	if config.PeerID != "" {
 		if err := node.AddNewContact(host, config.PeerID, "juan23"); err != nil {
 			fmt.Println("Failed to add contact:", err)
-			panic(err)
+			return err
 		}
 
 		var destContact *models.Contact
@@ -156,19 +208,19 @@ func main() {
 		// Get contact to send message to.
 		destContact, err = prod_api.GetContact(config.PeerID)
 		if err != nil {
-			panic("failed to get contact: " + err.Error())
+			return fmt.Errorf("failed to get contact: %w", err)
 		}
 
 		// Get chat with contact.
 		params := map[string]interface{}{"contact_id": destContact.ID}
 		chats, err = prod_api.GetChats(params)
 		if err != nil {
-			panic("failed to get chats: " + err.Error())
+			return fmt.Errorf("failed to get chats: %w", err)
 		}
 
 		var chat models.Chat
 		if len(chats) > 1 { // Unexpected number of chats, this should not happen.
-			panic(errors.New("fatal: unexpected number of chats for single contact: " + destContact.Name))
+			return fmt.Errorf("fatal: unexpected number of chats for single contact: %s", destContact.Name)
 		} else if len(chats) == 0 { // Chat does not exist, create it.
 			fmt.Printf("Creating new chat with %s.\n", destContact.Name)
 			chat = models.Chat{
@@ -176,7 +228,7 @@ func main() {
 			}
 			createdChat, err := prod_api.CreateChat(chat)
 			if err != nil {
-				panic("failed to create chat: " + err.Error())
+				return fmt.Errorf("failed to create chat: %w", err)
 			}
 			chat = *createdChat
 		} else { // Chat exists, use it.
@@ -193,7 +245,7 @@ func main() {
 		}
 		createdMessage, err := prod_api.CreateMessage(message)
 		if err != nil {
-			panic("failed to create message: " + err.Error())
+			return fmt.Errorf("failed to create message: %w", err)
 		}
 
 		fmt.Printf("Created message with ID=%s.\n", createdMessage.ID)
@@ -254,7 +306,8 @@ func main() {
 		} */
 	}
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
-	<-sigCh
+	// Wait for cancellation signal or context done
+	<-ctx.Done()
+
+	return nil
 }

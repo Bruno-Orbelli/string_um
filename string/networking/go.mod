@@ -7,6 +7,7 @@ require (
 	github.com/libp2p/go-libp2p v0.33.2
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/multiformats/go-multiaddr v0.12.3
+	gorm.io/gorm v1.25.10
 )
 
 require (
@@ -113,6 +114,5 @@ require (
 	gonum.org/v1/gonum v0.13.0 // indirect
 	google.golang.org/protobuf v1.32.0 // indirect
 	gorm.io/driver/sqlite v1.5.5 // indirect
-	gorm.io/gorm v1.25.10 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 )
