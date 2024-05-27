@@ -33,7 +33,7 @@ func GetContacts(w http.ResponseWriter, r *http.Request) {
 
 	// Filter contacts based on the query parameters
 	var filteredContacts []models.Contact
-	result := Database.Where(filter).Find(&filteredContacts)
+	result := Database.Preload("ContactAddresses").Preload("Chat").Where(filter).Find(&filteredContacts)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return
@@ -57,7 +57,7 @@ func GetContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var contact models.Contact
-	result := Database.First(&contact, "id = ?", r.PathValue("id"))
+	result := Database.Preload("ContactAddresses").Preload("Chat").First(&contact, "id = ?", r.PathValue("id"))
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return
@@ -115,8 +115,15 @@ func UpdateContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the contact with the provided ID
+	result := Database.Preload("ContactAddresses").Preload("Chat").Model(models.Contact{}).Where("id = ?", r.PathValue("id")).Updates(partialContact)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
+	}
+
+	// Retrieve the updated contact
 	var updatedContact models.Contact
-	result := Database.Model(&updatedContact).Where("id = ?", r.PathValue("id")).Updates(partialContact)
+	result = Database.Preload("ContactAddresses").Preload("Chat").First(&updatedContact, "id = ?", r.PathValue("id"))
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return

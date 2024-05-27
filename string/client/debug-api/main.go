@@ -19,18 +19,21 @@ func getMux() *http.ServeMux {
 	mux.HandleFunc("/contacts", GetContacts)
 	mux.HandleFunc("/contacts/{id}", GetContact)
 	mux.HandleFunc("/contacts/create", CreateContact)
+	mux.HandleFunc("/contacts/update/{id}", UpdateContact)
 	mux.HandleFunc("/contacts/delete/{id}", DeleteContact)
 
 	// Contact Addresses
 	mux.HandleFunc("/contactAddresses", GetContactAddresses)
 	mux.HandleFunc("/contactAddresses/{id}", GetContactAddress)
 	mux.HandleFunc("/contactAddresses/create", CreateContactAddress)
+	mux.HandleFunc("/contactAddresses/update/{id}", UpdateContactAddress)
 	mux.HandleFunc("/contactAddresses/delete/{id}", DeleteContactAddress)
 
 	// Chats
 	mux.HandleFunc("/chats", GetChats)
 	mux.HandleFunc("/chats/{id}", GetChat)
 	mux.HandleFunc("/chats/create", CreateChat)
+	mux.HandleFunc("/chats/update/{id}", UpdateChat)
 	mux.HandleFunc("/chats/delete/{id}", DeleteChat)
 
 	// Messages

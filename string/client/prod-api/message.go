@@ -48,8 +48,14 @@ func CreateMessage(newMessage models.Message) (*models.Message, error) {
 // Handler function to handle UPDATE requests directly to database
 func UpdateMessage(id uuid.UUID, partialMessage map[string]interface{}) (*models.Message, error) {
 	// Update the Message with the provided ID
+	result := Database.Model(models.Message{}).Where("id = ?", id).Updates(partialMessage)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	// Retrieve the updated message
 	var updatedMessage models.Message
-	result := Database.Model(&updatedMessage).Where("id = ?", id).Updates(partialMessage)
+	result = Database.First(&updatedMessage, "id = ?", id)
 	if result.Error != nil {
 		return nil, result.Error
 	}

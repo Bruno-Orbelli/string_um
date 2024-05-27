@@ -22,3 +22,6 @@ go.work
 
 # Databases
 *.db
+
+# Salts
+en_salt.txt
