@@ -36,41 +36,22 @@ func CreateOwnUser(newOwnUser models.OwnUser) (*models.OwnUser, error) {
 }
 
 // Handler function to handle PUT requests to /ownUser/update/{id} endpoint
-/* func UpdateOwnUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Check if the ID is provided in the URL
-	if r.PathValue("id") == "" {
-		http.Error(w, "ID is required", http.StatusBadRequest)
-		return
-	}
-
-	// Parse JSON request body into a map
-	var partialOwnUser map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&partialOwnUser); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Update the ownUser with the provided ID
-	var updatedOwnUser models.OwnUser
-	result := Database.Model(&updatedOwnUser).Where("id = ?", r.PathValue("id")).Updates(partialOwnUser)
+func UpdateOwnUser(id string, partialUser map[string]interface{}) (*models.OwnUser, error) {
+	// Update the OwnUser with the provided partial data
+	result := Database.Model(models.OwnUser{}).Where("id = ?", id).Updates(partialUser)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			http.Error(w, "OwnUser not found", http.StatusNotFound)
-		} else {
-			http.Error(w, result.Error.Error(), http.StatusInternalServerError)
-		}
-		return
+		return nil, result.Error
 	}
 
-	// Set status code to 200 and return the updated message
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(updatedOwnUser)
-} */
+	// Retrieve the updated ownUser
+	var updatedOwnUser models.OwnUser
+	result = Database.First(&updatedOwnUser)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return &updatedOwnUser, nil
+}
 
 // Handler function to handle DELETE requests directly to database
 func DeleteOwnUser() error {

@@ -7,8 +7,9 @@ import (
 )
 
 type OwnUser struct {
-	ID         string `gorm:"type:string;primaryKey;unique;not null" json:"id"`
-	PrivateKey []byte `gorm:"type:byte[];not null" json:"privateKey"`
+	ID           string `gorm:"type:string;primaryKey;unique;not null" json:"id"`
+	PasswordHash string `gorm:"type:string;not null" json:"passwordHash"`
+	PrivateKey   []byte `gorm:"type:byte[];not null" json:"privateKey"`
 }
 
 type Contact struct {

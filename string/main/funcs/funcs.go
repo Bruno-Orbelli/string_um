@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func CreateOwnUser() (*models.OwnUser, *models.Contact, error) {
+func CreateOwnUser(passwordHash string) (*models.OwnUser, *models.Contact, error) {
 	// fmt.Println("Creating own user...")
 
 	// Generate private key
@@ -38,8 +38,9 @@ func CreateOwnUser() (*models.OwnUser, *models.Contact, error) {
 
 	// Create own user
 	ownUser := models.OwnUser{
-		ID:         id.String(),
-		PrivateKey: marshalledKey,
+		ID:           id.String(),
+		PasswordHash: passwordHash,
+		PrivateKey:   marshalledKey,
 	}
 
 	// Persist own user
@@ -63,7 +64,8 @@ func CreateOwnUser() (*models.OwnUser, *models.Contact, error) {
 	return createdOwnUser, createdOwnContact, nil
 }
 
-func GetOwnUserIfExists() (*models.OwnUser, *models.Contact, error) {
+func GetOwnUser() (*models.OwnUser, *models.Contact, error) {
+	prod_api.RunDatabaseAPI()
 	// Check if own user exists
 	ownUser, err := prod_api.GetOwnUser()
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -78,8 +80,24 @@ func GetOwnUserIfExists() (*models.OwnUser, *models.Contact, error) {
 		}
 		return ownUser, ownUserContact, nil
 	} else { // Own user does not exist
-		return CreateOwnUser()
+		return nil, nil, nil
 	}
+}
+
+func UpdateOwnUserHash(passwordHash string) error {
+	prod_api.RunDatabaseAPI()
+	ownUser, _, err := GetOwnUser()
+	if err != nil {
+		return err
+	}
+
+	params := map[string]interface{}{"password_hash": passwordHash}
+
+	if _, err := prod_api.UpdateOwnUser(ownUser.ID, params); err != nil {
+		return fmt.Errorf("failed to update own user: %w", err)
+	}
+
+	return nil
 }
 
 func AddMessageToBeSent(chatID uuid.UUID, senderID string, body string) error {
@@ -102,20 +120,89 @@ func AddMessageToBeSent(chatID uuid.UUID, senderID string, body string) error {
 
 func Register(password string) error {
 	prod_api.RunDatabaseAPI()
-	if _, _, err := CreateOwnUser(); err != nil {
+	salt, err := encryption.GenerateSalt("en_salt.txt")
+	if err != nil {
+		return err
+	}
+	hash, err := encryption.HashPassword(password, []byte(salt))
+	if err != nil {
+		return err
+	}
+	if _, _, err := CreateOwnUser(hash); err != nil {
 		return err
 	} else {
-		encryption.EncryptFile("test.db", "en_test.db", password, "en_salt.txt")
+		encryption.EncryptFile("test.db", "en_test.db", hash, salt)
 		os.Remove("test.db")
 	}
 	return nil
 }
 
 func Login(password string) error {
-	if err := encryption.DecryptFile("en_test.db", "test.db", password, "en_salt.txt"); err != nil {
+	// Get old salt
+	oldSalt, err := encryption.GetSalt("en_salt.txt")
+	if err != nil {
 		return err
 	}
+
+	// Decrypt the database using the derived key
+	if err := encryption.DecryptFile("en_test.db", "test.db", password, oldSalt); err != nil {
+		return err
+	}
+
+	// Generate a new salt
+	newSalt, err := encryption.GenerateSalt("en_salt.txt")
+	if err != nil {
+		return err
+	}
+
+	// Hash the password with the new salt
+	newHash, err := encryption.HashPassword(password, []byte(newSalt))
+	if err != nil {
+		return err
+	}
+
+	// Update the user's hash and salt
+	if err := UpdateOwnUserHash(newHash); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func CloseDatabase() error {
+	ownUser, _, err := GetOwnUser()
+	if err != nil {
+		return err
+	}
+	salt, err := encryption.GetSalt("en_salt.txt")
+	if err != nil {
+		return err
+	}
+	if err := encryption.EncryptFile("test.db", "en_test.db", ownUser.PasswordHash, salt); err != nil {
+		return err
+	}
+	fileInfo, err := os.Stat("test.db")
+	if err != nil {
+		return err
+	} else if fileInfo != nil {
+		if err := os.Remove("test.db"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func GetContactByName(name string) (*models.Contact, error) {
+	contacts, err := prod_api.GetContacts(map[string]interface{}{"name": name})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get contacts: %w", err)
+	}
+
+	if len(contacts) == 0 {
+		return nil, nil
+	}
+
+	return &contacts[0], nil
 }
 
 func GetChatsAndInfoWithMessages() ([]models.ChatDTO, error) {

@@ -1,157 +1,43 @@
 package pages
 
 import (
+	"fmt"
+	"os"
 	"string_um/string/main/funcs"
 	"string_um/string/models"
+
+	"string_um/string/main/tui/components"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/google/uuid"
 	"github.com/rivo/tview"
 )
 
-var chats = []models.ChatDTO{
-	{
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	},
-	{
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	}, {
-		ID:          uuid.New(),
-		ContactID:   "qkdwwd",
-		ContactName: "John Doe",
-		Messages:    nil,
-	},
+var chats []models.ChatDTO
+var chatListView = components.ChatList()
+
+// TODO: Add a chan to refresh the chats
+
+func updateChatList() {
+	chats = getChats()
+	chatListView.Clear()
+	for _, chat := range chats {
+		chatListView.AddItem(chat.ContactName, chat.ContactID, 0, nil)
+	}
+	chatListView.SetCurrentItem(0)
+}
+
+func waitForChats(sigChan chan os.Signal, app *tview.Application) {
+	for {
+		select {
+		case <-components.ChatsReadyChan:
+			app.QueueUpdateDraw(updateChatList)
+		case <-components.ChatsRefreshedChan:
+			app.QueueUpdateDraw(updateChatList)
+		case <-sigChan:
+			return
+		}
+	}
 }
 
 func getChats() []models.ChatDTO {
@@ -165,66 +51,72 @@ func getChats() []models.ChatDTO {
 	return chats
 }
 
-func displaySelectedChat(chatID uuid.UUID) {
+func getSelectedChat(chatID uuid.UUID) *models.ChatDTO {
 	for _, chat := range chats {
 		if chat.ID == chatID {
-			chatMessages := chat.Messages
-			for _, message := range chatMessages {
-				lowerTextView.Write([]byte(chat.ContactName + ": " + message.Message + "\n"))
-			}
-			return
+			return &chat
+		}
+	}
+	return nil
+}
+
+func displayMessages(chat models.ChatDTO, chatTextView *tview.TextView) {
+	messages := chat.Messages
+	ownUser, _, err := funcs.GetOwnUser()
+	if err != nil {
+		panic(err)
+	}
+	for _, message := range messages {
+		if message.SentByID == ownUser.ID {
+			chatTextView.Write(
+				[]byte(fmt.Sprintf("\t%s: %s\n\t%s", "You", message.Message, message.SentAt.Format("02 Jan 2006 15:04")+"\n\n")))
+		} else {
+			chatTextView.Write(
+				[]byte(fmt.Sprintf("%s: %s\n%s", chat.ContactName, message.Message, message.SentAt.Format("02 Jan 2006 15:04")+"\n\n")))
 		}
 	}
 }
 
-func BuildMainPage() tview.Primitive {
+func BuildMainPage(app *tview.Application, sigChan chan os.Signal) tview.Primitive {
 	flex := tview.NewFlex()
 	flex.SetBorder(false).SetBorderAttributes(tcell.AttrDim).SetBorderColor(tcell.NewRGBColor(228, 179, 99))
 
 	flex1 := tview.NewFlex()
 
-	upperInfo := tview.NewTextView()
-	upperInfo.SetText("String - Secure Messaging.\tVersion 1.0.0")
-	upperInfo.SetTextStyle(tcell.StyleDefault.Italic(true))
-	upperInfo.SetTextAlign(tview.AlignCenter)
-	upperInfo.SetTextColor(tcell.NewRGBColor(232, 233, 235))
-
-	logo := tview.NewTextView()
-	logo.Write(loadTitle())
-	logo.SetTextAlign(tview.AlignCenter)
-	logo.SetTextColor(tcell.NewRGBColor(224, 223, 213))
-
-	chatList := tview.NewList()
-	chatList.ShowSecondaryText(true)
-	chatList.SetMainTextColor(tcell.NewRGBColor(232, 233, 235))
-	chatList.SetSecondaryTextColor(tcell.NewRGBColor(241, 217, 177))
-	chatList.SetSelectedTextColor(tcell.ColorBlack)
-	chatList.SetSelectedBackgroundColor(tcell.NewRGBColor(228, 179, 99))
-	chatList.SetBorder(true).SetBorderColor(tcell.NewRGBColor(182, 143, 79))
-	chatList.SetTitle("Chats").SetTitleColor(tcell.NewRGBColor(228, 179, 99))
+	upperInfo := components.InfoText()
+	logo := components.Logo(tcell.NewRGBColor(232, 233, 235))
 
 	for _, chat := range chats {
-		chatList.AddItem(chat.ContactName, chat.ContactID, 0, nil)
+		chatListView.AddItem(chat.ContactName, chat.ContactID, 0, nil)
 	}
 
-	form := tview.NewForm().SetButtonsAlign(tview.AlignCenter)
-	form.SetTitleAlign(tview.AlignCenter)
-	form.AddPasswordField("Password: ", "", 30, '*', func(text string) {
-		lowerTextView.SetText("")
-		inputedPassword = text
-	})
-	form.AddButton("Login", login)
-	form.SetLabelColor(tcell.NewRGBColor(228, 179, 99)).SetFieldBackgroundColor(tcell.NewRGBColor(224, 223, 213)).SetFieldTextColor(tcell.NewRGBColor(50, 55, 57)).SetButtonBackgroundColor(tcell.NewRGBColor(228, 179, 99)).SetButtonTextColor(tcell.ColorBlack)
-
-	flex1.SetBorder(true).SetBorderColor(tcell.NewRGBColor(224, 223, 213))
+	flex1.SetBorder(true).SetBorderColor(tcell.NewRGBColor(232, 233, 235))
 	flex1.SetDirection(tview.FlexRow).AddItem(upperInfo, 0, 1, true)
 	flex1.SetDirection(tview.FlexRow).AddItem(logo, 0, 4, true)
+	flex1.SetDirection(tview.FlexRow).AddItem(components.LowerTextView, 0, 1, true)
 
-	//flex2.SetDirection(tview.FlexRow).AddItem(logo, 0, 1, true)
+	// Select chat
+	chatTextView := tview.NewTextView()
+	chatListView.SetSelectedFunc(
+		func(row int, mainText, secondaryText string, shortcut rune) {
+			chat := getSelectedChat(chats[row].ID)
+			chatTitleView := components.ChatTitle(chat.ContactName)
+			flex1.Clear()
+			flex1.AddItem(chatTitleView, 0, 1, true)
+			chatTextView = tview.NewTextView()
+			displayMessages(*chat, chatTextView)
+			flex1.AddItem(chatTextView, 0, 7, true)
+		},
+	)
 
-	flex.SetDirection(tview.FlexColumn).AddItem(chatList, 0, 1, true)
+	// Option menu
+	optionMenu := components.OptionsMenu(sigChan, flex1)
+
+	flex.SetDirection(tview.FlexColumn).AddItem(chatListView, 0, 1, true)
 	flex.SetDirection(tview.FlexColumn).AddItem(flex1, 0, 4, true)
-	flex.SetDirection(tview.FlexColumn).AddItem(tview.NewBox(), 0, 1, true)
+	flex.SetDirection(tview.FlexColumn).AddItem(optionMenu, 0, 1, true)
+
+	go waitForChats(sigChan, app)
 
 	return flex
 }

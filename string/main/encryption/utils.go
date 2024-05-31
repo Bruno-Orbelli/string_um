@@ -10,6 +10,14 @@ import (
 	"golang.org/x/crypto/scrypt"
 )
 
+func HashPassword(password string, saltBytes []byte) (string, error) {
+	hash, err := scrypt.Key([]byte(password), saltBytes, 32768, 8, 1, 32)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
 func GetSalt(saltFile string) (string, error) {
 	salt, err := os.ReadFile(saltFile)
 	if err != nil {
@@ -30,9 +38,9 @@ func GenerateSalt(saltFile string) (string, error) {
 }
 
 // GenerateKey derives a key from a passphrase using scrypt
-func GenerateKey(passphrase, saltStr string) ([]byte, error) {
-	salt := []byte(saltStr) // should be securely stored/retrieved
-	key, err := scrypt.Key([]byte(passphrase), salt, 32768, 8, 1, 32)
+func GenerateKey(passphraseHash string, salt string) ([]byte, error) {
+	saltBytes := []byte(salt) // should be securely stored/retrieved
+	key, err := scrypt.Key([]byte(passphraseHash), saltBytes, 32768, 8, 1, 32)
 	if err != nil {
 		return nil, err
 	}
@@ -40,15 +48,9 @@ func GenerateKey(passphrase, saltStr string) ([]byte, error) {
 }
 
 // EncryptFile encrypts the input file and writes to the output file
-func EncryptFile(inputFile, outputFile, passphrase, saltFile string) error {
-	// Generate salt
-	salt, err := GenerateSalt(saltFile)
-	if err != nil {
-		return err
-	}
-
+func EncryptFile(inputFile, outputFile, passphraseHash, salt string) error {
 	// Generate encryption key
-	key, err := GenerateKey(passphrase, salt)
+	key, err := GenerateKey(passphraseHash, salt)
 	if err != nil {
 		return err
 	}
@@ -81,7 +83,7 @@ func EncryptFile(inputFile, outputFile, passphrase, saltFile string) error {
 	ciphertext := aead.Seal(nonce, nonce, plaintext, nil)
 
 	// Write the encrypted data to the output file
-	if err := os.WriteFile(outputFile, ciphertext, 0444); err != nil {
+	if err := os.WriteFile(outputFile, ciphertext, 0644); err != nil { // Remember to change it back to 444
 		return err
 	}
 
@@ -89,15 +91,15 @@ func EncryptFile(inputFile, outputFile, passphrase, saltFile string) error {
 }
 
 // DecryptFile decrypts the input file and writes to the output file
-func DecryptFile(inputFile, outputFile, passphrase, saltFile string) error {
-	// Read the salt
-	salt, err := GetSalt(saltFile)
+func DecryptFile(inputFile string, outputFile string, passphrase string, salt string) error {
+	// Hash the passphrase
+	passphraseHash, err := HashPassword(passphrase, []byte(salt))
 	if err != nil {
 		return err
 	}
 
 	// Generate encryption key
-	key, err := GenerateKey(passphrase, salt)
+	key, err := GenerateKey(passphraseHash, salt)
 	if err != nil {
 		return err
 	}
