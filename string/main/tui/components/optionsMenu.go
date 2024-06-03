@@ -10,7 +10,7 @@ import (
 
 var sigChannel chan os.Signal
 var containingFlex *tview.Flex
-var contactForm = AddContactForm(libp2pHost)
+var contactForm = AddContactForm()
 var chatForm = NewChatForm()
 
 func onNewChatSelected() {

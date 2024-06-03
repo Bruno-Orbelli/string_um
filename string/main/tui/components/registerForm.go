@@ -2,6 +2,7 @@ package components
 
 import (
 	"string_um/string/main/funcs"
+	"string_um/string/main/tui/globals"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -18,26 +19,26 @@ func checkPassword() bool {
 func register() {
 	inputedPassword := registerForm.GetFormItemByLabel("Password: ").(*tview.InputField).GetText()
 	if !checkPassword() {
-		LowerTextView.SetText("Passwords do not match.").SetTextColor(tcell.ColorRed)
+		globals.LowerTextView.SetText("Passwords do not match.").SetTextColor(tcell.ColorRed)
 		return
 	}
 	if err := funcs.Register(inputedPassword); err != nil {
 		errorMssg := err.Error()
-		LowerTextView.SetText(errorMssg).SetTextColor(tcell.ColorRed)
+		globals.LowerTextView.SetText(errorMssg).SetTextColor(tcell.ColorRed)
 		return
 	} else {
-		LowerTextView.SetText("Registration successful!").SetTextColor(tcell.ColorGreen)
-		Pages.SwitchToPage("login")
+		globals.LowerTextView.SetText("Registration successful!").SetTextColor(tcell.ColorGreen)
+		globals.Pages.SwitchToPage("login")
 	}
 }
 
 func RegisterForm() *tview.Form {
 	registerForm.SetTitleAlign(tview.AlignCenter)
 	registerForm.AddPasswordField("Password: ", "", 30, '*', func(text string) {
-		LowerTextView.SetText("")
+		globals.LowerTextView.SetText("")
 	})
 	registerForm.AddPasswordField("Confirm password: ", "", 30, '*', func(text string) {
-		LowerTextView.SetText("")
+		globals.LowerTextView.SetText("")
 	})
 	registerForm.AddButton("Register", register)
 	registerForm.SetLabelColor(tcell.NewRGBColor(228, 179, 99)).SetFieldBackgroundColor(tcell.NewRGBColor(224, 223, 213)).SetFieldTextColor(tcell.NewRGBColor(50, 55, 57)).SetButtonBackgroundColor(tcell.NewRGBColor(228, 179, 99)).SetButtonTextColor(tcell.ColorBlack)

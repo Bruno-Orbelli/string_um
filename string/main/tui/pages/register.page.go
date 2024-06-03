@@ -2,6 +2,7 @@ package pages
 
 import (
 	"string_um/string/main/tui/components"
+	"string_um/string/main/tui/globals"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -31,7 +32,7 @@ func BuildRegisterPage() tview.Primitive {
 	flex4.SetDirection(tview.FlexColumn).AddItem(form, 0, 1, true)
 	flex4.SetDirection(tview.FlexColumn).AddItem(tview.NewBox(), 0, 1, true)
 
-	flex5.SetDirection(tview.FlexRow).AddItem(components.LowerTextView, 0, 1, true)
+	flex5.SetDirection(tview.FlexRow).AddItem(globals.LowerTextView, 0, 1, true)
 
 	flex.SetDirection(tview.FlexRow).AddItem(flex1, 0, 1, true)
 	flex.SetDirection(tview.FlexRow).AddItem(flex2, 0, 2, true)

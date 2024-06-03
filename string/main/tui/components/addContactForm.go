@@ -1,6 +1,7 @@
 package components
 
 import (
+	"string_um/string/main/tui/globals"
 	"string_um/string/networking/node"
 
 	"github.com/gdamore/tcell/v2"
@@ -9,23 +10,30 @@ import (
 )
 
 var addContactForm = tview.NewForm()
-var libp2pHost host.Host
+var Libp2pHost host.Host
 
 func addContact() {
 	name := addContactForm.GetFormItemByLabel("Name: ").(*tview.InputField).GetText()
 	multihash := addContactForm.GetFormItemByLabel("Multihash: ").(*tview.InputField).GetText()
 	if name == "" {
-		LowerTextView.SetText("Name can't be empty.")
+		InfoBoxInstance.Clear()
+		UpdateInfo(true, "Name can't be empty.")
 		return
 	} else if multihash == "" {
-		LowerTextView.SetText("Multihash can't be empty.")
+		InfoBoxInstance.Clear()
+		UpdateInfo(true, "Multihash can't be empty.")
 		return
 
 	}
-	if err := node.AddNewContact(libp2pHost, multihash, name); err != nil {
-		LowerTextView.SetText(err.Error())
+	if err := node.AddNewContact(Libp2pHost, multihash, name); err != nil {
+		InfoBoxInstance.Clear()
+		UpdateInfo(true, err.Error())
 	} else {
-		LowerTextView.SetText("Contact added.")
+		InfoBoxInstance.Clear()
+		UpdateInfo(false, "Contact added.")
+		globals.ChatsRefreshedChan <- true
+		addContactForm.GetFormItemByLabel("Name: ").(*tview.InputField).SetText("")
+		addContactForm.GetFormItemByLabel("Multihash: ").(*tview.InputField).SetText("")
 	}
 }
 
@@ -35,10 +43,9 @@ func goBack() {
 	containingFlex.AddItem(Logo(tcell.NewRGBColor(232, 233, 235)), 0, 4, true)
 }
 
-func AddContactForm(p2phost host.Host) *tview.Form {
-	libp2pHost = p2phost
-
-	LowerTextView.SetText("")
+func AddContactForm() *tview.Form {
+	globals.LowerTextView.SetText("")
+	InfoBoxInstance.Clear()
 	addContactForm.SetBorder(true)
 	addContactForm.SetTitle("Add new contact")
 	addContactForm.SetTitleAlign(tview.AlignCenter)
@@ -55,6 +62,5 @@ func AddContactForm(p2phost host.Host) *tview.Form {
 	addContactForm.AddInputField("Name: ", "", 40, nil, nil)
 	addContactForm.AddInputField("Multihash: ", "", 40, nil, nil)
 	addContactForm.AddButton("Add", addContact)
-	addContactForm.AddFormItem(LowerTextView)
 	return addContactForm
 }

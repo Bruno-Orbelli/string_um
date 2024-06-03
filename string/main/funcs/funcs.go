@@ -1,17 +1,23 @@
 package funcs
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	prod_api "string_um/string/client/prod-api"
 	"string_um/string/main/encryption"
 	"string_um/string/models"
+	"string_um/string/networking/node"
 	"time"
 
 	"github.com/google/uuid"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 	"gorm.io/gorm"
 )
 
@@ -64,6 +70,71 @@ func CreateOwnUser(passwordHash string) (*models.OwnUser, *models.Contact, error
 	return createdOwnUser, createdOwnContact, nil
 }
 
+func AddContactAddressesForUnknownContacts(host host.Host) error {
+	contacts, err := prod_api.GetContacts(nil)
+	if err != nil {
+		return fmt.Errorf("failed to get contacts: %w", err)
+	}
+
+	for _, contact := range contacts {
+		if contact.ID == contact.Name {
+			err = node.AddKnownAddressesForContact(host, contact.ID)
+			if err != nil {
+				return fmt.Errorf("failed to add known addresses for contact: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func StartHost(ctx context.Context, priv crypto.PrivKey) (host.Host, *dht.IpfsDHT, error) {
+	// Get key if it does not exist
+	var privKey crypto.PrivKey
+	var err error
+	if priv == nil {
+		privKey, _, err = crypto.GenerateKeyPair(crypto.RSA, 2048)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		privKey = priv
+	}
+
+	// Try the default multiaddresses if the ports are available
+	var listenAddrs []multiaddr.Multiaddr
+	portNum := 40000
+	for {
+		// Check port availability
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", portNum))
+		if err != nil {
+			portNum++
+			continue
+		}
+		ln.Close()
+
+		listenAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip6/::/tcp/%d", portNum))
+		if err != nil {
+			return nil, nil, err
+		}
+		listenAddrs = append(listenAddrs, listenAddr)
+		break
+	}
+
+	host, dht, err := node.CreateNewNode(
+		ctx,
+		privKey,
+		listenAddrs,
+		make([]multiaddr.Multiaddr, 0),
+		make([]multiaddr.Multiaddr, 0),
+		"/chat/0.0.1",
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	return host, dht, nil
+}
+
 func GetOwnUser() (*models.OwnUser, *models.Contact, error) {
 	prod_api.RunDatabaseAPI()
 	// Check if own user exists
@@ -109,12 +180,12 @@ func AddMessageToBeSent(chatID uuid.UUID, senderID string, body string) error {
 		SentAt:      time.Now(),
 		Message:     body,
 	}
-	createdMessage, err := prod_api.CreateMessage(message)
+	_, err := prod_api.CreateMessage(message)
 	if err != nil {
 		return fmt.Errorf("failed to create message: %w", err)
 	}
 
-	fmt.Printf("Created message with ID=%s.\n", createdMessage.ID)
+	// fmt.Printf("Created message with ID=%s.\n", createdMessage.ID)
 	return nil
 }
 
@@ -205,7 +276,7 @@ func GetContactByName(name string) (*models.Contact, error) {
 	return &contacts[0], nil
 }
 
-func GetChatsAndInfoWithMessages() ([]models.ChatDTO, error) {
+func GetChatsAndInfo() ([]models.ChatDTO, error) {
 	chats, err := prod_api.GetChats(nil)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -216,19 +287,17 @@ func GetChatsAndInfoWithMessages() ([]models.ChatDTO, error) {
 
 	var chatDTOsWithMessages []models.ChatDTO
 	for _, chat := range chats {
-		if len(chat.Messages) > 0 {
-			contact, err := prod_api.GetContact(chat.ContactID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get contact: %w", err)
-			}
-			// Create chat DTO with messages
-			chatDTO := models.ChatDTO{
-				ID:          chat.ID,
-				ContactName: contact.Name,
-				Messages:    chat.Messages,
-			}
-			chatDTOsWithMessages = append(chatDTOsWithMessages, chatDTO)
+		contact, err := prod_api.GetContact(chat.ContactID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get contact: %w", err)
 		}
+		// Create chat DTO with messages
+		chatDTO := models.ChatDTO{
+			ID:          chat.ID,
+			ContactName: contact.Name,
+			Messages:    chat.Messages,
+		}
+		chatDTOsWithMessages = append(chatDTOsWithMessages, chatDTO)
 	}
 
 	return chatDTOsWithMessages, nil
