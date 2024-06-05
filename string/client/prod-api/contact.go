@@ -19,7 +19,7 @@ func GetContacts(params map[string]interface{}) ([]models.Contact, error) {
 // Handler function to handle GET requests directly to database
 func GetContact(id string) (*models.Contact, error) {
 	var contact models.Contact
-	result := Database.First(&contact, "id = ?", id)
+	result := Database.Preload("ContactAddresses").Preload("Chat").First(&contact, "id = ?", id)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -41,8 +41,14 @@ func CreateContact(newContact models.Contact) (*models.Contact, error) {
 // Handler function to handle UPDATE requests directly to database
 func UpdateContact(id string, partialContact map[string]interface{}) (*models.Contact, error) {
 	// Update the contact with the provided ID
+	result := Database.Preload("ContactAddresses").Preload("Chat").Model(models.Contact{}).Where("id = ?", id).Updates(partialContact)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	// Retrieve the updated contact
 	var updatedContact models.Contact
-	result := Database.Model(&updatedContact).Where("id = ?", id).Updates(partialContact)
+	result = Database.Preload("ContactAddresses").Preload("Chat").First(&updatedContact, "id = ?", id)
 	if result.Error != nil {
 		return nil, result.Error
 	}

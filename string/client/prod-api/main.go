@@ -33,5 +33,5 @@ func RunDatabaseAPI() {
 		panic(fmt.Sprintf("Failed to auto-migrate database: %v", err))
 	}
 
-	fmt.Println("Database direct API running.")
+	// fmt.Println("Database direct API running.")
 }

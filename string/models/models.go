@@ -7,9 +7,9 @@ import (
 )
 
 type OwnUser struct {
-	ID         string `gorm:"type:string;primaryKey;unique;not null" json:"id"`
-	Password   string `gorm:"type:string;not null" json:"password"`
-	PrivateKey []byte `gorm:"type:byte[];not null" json:"privateKey"`
+	ID           string `gorm:"type:string;primaryKey;unique;not null" json:"id"`
+	PasswordHash string `gorm:"type:string;not null" json:"passwordHash"`
+	PrivateKey   []byte `gorm:"type:byte[];not null" json:"privateKey"`
 }
 
 type Contact struct {
@@ -30,6 +30,13 @@ type Chat struct {
 	ID        uuid.UUID `gorm:"type:string;primaryKey;unique;not null" json:"id"`
 	ContactID string    `gorm:"type:string;not null;constraint:OnDelete:CASCADE" json:"contactID"`
 	Messages  []Message `gorm:"foreignKey:ChatID" json:"messages"`
+}
+
+type ChatDTO struct {
+	ID          uuid.UUID `gorm:"type:string;primaryKey;unique;not null" json:"id"`
+	ContactID   string    `gorm:"type:string;not null" json:"contactID"`
+	ContactName string    `gorm:"type:string;not null" json:"contactName"`
+	Messages    []Message `gorm:"foreignKey:ChatID" json:"messages"`
 }
 
 type Message struct {
