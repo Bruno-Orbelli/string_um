@@ -25,3 +25,7 @@ go.work
 
 # Salts
 en_salt.txt
+
+# OpenCV
+opencv-4.x/*
+build/*
