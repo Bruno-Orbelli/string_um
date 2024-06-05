@@ -134,9 +134,16 @@ func UpdateContactAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update the contactAddres with the provided ID
+	// Update the contactAddress with the provided ID
+	result := Database.Model(models.ContactAddress{}).Where("id = ?", uuid).Updates(partialContactAddress)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
+	}
+
+	// Retrieve the updated contactAddress
 	var updatedContactAddress models.ContactAddress
-	result := Database.Model(&updatedContactAddress).Where("id = ?", uuid).Updates(partialContactAddress)
+	result = Database.First(&updatedContactAddress, "id = ?", uuid)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return

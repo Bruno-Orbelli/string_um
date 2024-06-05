@@ -48,8 +48,14 @@ func CreateContactAddress(newContactAddress models.ContactAddress) (*models.Cont
 // Handler function to handle UPDATE requests directly to database
 func UpdateContactAddress(id uuid.UUID, partialContactAddress map[string]interface{}) (*models.ContactAddress, error) {
 	// Update the contactAddress with the provided ID
+	result := Database.Model(models.ContactAddress{}).Where("id = ?", id).Updates(partialContactAddress)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	// Retrieve the updated contactAddress
 	var updatedContactAddress models.ContactAddress
-	result := Database.Model(&updatedContactAddress).Where("id = ?", id).Updates(partialContactAddress)
+	result = Database.First(&updatedContactAddress, "id = ?", id)
 	if result.Error != nil {
 		return nil, result.Error
 	}

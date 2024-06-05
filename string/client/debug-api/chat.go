@@ -36,7 +36,7 @@ func GetChats(w http.ResponseWriter, r *http.Request) {
 
 	// Filter the Chats slice based on the query parameters
 	var filteredChats []models.Chat
-	result := Database.Where(filter).Find(&filteredChats)
+	result := Database.Preload("Messages").Where(filter).Find(&filteredChats)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return
@@ -67,7 +67,7 @@ func GetChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var chat models.Chat
-	result := Database.First(&chat, "id = ?", uuid)
+	result := Database.Preload("Messages").First(&chat, "id = ?", uuid)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return
@@ -137,8 +137,15 @@ func UpdateChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the chat with the provided ID
+	result := Database.Preload("Messages").Model(models.Chat{}).Where("id = ?", uuid).Updates(partialChat)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
+	}
+
+	// Retrieve the updated chat
 	var updatedChat models.Chat
-	result := Database.Model(&updatedChat).Where("id = ?", uuid).Updates(partialChat)
+	result = Database.Preload("Messages").First(&updatedChat, "id = ?", uuid)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return

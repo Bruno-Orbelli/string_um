@@ -135,8 +135,15 @@ func UpdateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the message with the provided ID
+	result := Database.Model(models.Message{}).Where("id = ?", uuid).Updates(partialMessage)
+	if result.Error != nil {
+		HandleError(w, result.Error)
+		return
+	}
+
+	// Retrieve the updated message
 	var updatedMessage models.Message
-	result := Database.Model(&updatedMessage).Where("id = ?", uuid).Updates(partialMessage)
+	result = Database.First(&updatedMessage, "id = ?", uuid)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return
