@@ -2,8 +2,8 @@ package pages
 
 import (
 	"os"
+	"string_um/string/entities"
 	"string_um/string/main/funcs"
-	"string_um/string/models"
 
 	"string_um/string/main/tui/components"
 	"string_um/string/main/tui/globals"
@@ -13,7 +13,7 @@ import (
 	"github.com/rivo/tview"
 )
 
-var chats []models.ChatDTO
+var chats []entities.ChatDTO
 var chatListView = components.ChatList()
 var selectedChatList = components.SelectedChatList()
 var selectedChatID *uuid.UUID
@@ -47,18 +47,18 @@ func mainLoop(sigChan chan os.Signal, app *tview.Application) {
 	}
 }
 
-func getChats() []models.ChatDTO {
+func getChats() []entities.ChatDTO {
 	chats, err := funcs.GetChatsAndInfo()
 	if err != nil {
 		panic(err)
 	}
 	if chats == nil {
-		return []models.ChatDTO{}
+		return []entities.ChatDTO{}
 	}
 	return chats
 }
 
-func getSelectedChat(chatID uuid.UUID) *models.ChatDTO {
+func getSelectedChat(chatID uuid.UUID) *entities.ChatDTO {
 	for _, chat := range chats {
 		if chat.ID == chatID {
 			return &chat

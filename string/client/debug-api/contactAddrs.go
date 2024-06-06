@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"string_um/string/models"
+	"string_um/string/entities"
 
 	"errors"
 
@@ -35,7 +35,7 @@ func GetContactAddresses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter the ContactAddress entity based on the query parameters
-	var filteredContactAddresses []models.ContactAddress
+	var filteredContactAddresses []entities.ContactAddress
 	result := Database.Where(filter).Find(&filteredContactAddresses)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -66,7 +66,7 @@ func GetContactAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var contactAddress models.ContactAddress
+	var contactAddress entities.ContactAddress
 	result := Database.First(&contactAddress, "id = ?", uuid)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -85,7 +85,7 @@ func CreateContactAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse JSON request body into a ContactAddress struct
-	var newContactAddress models.ContactAddress
+	var newContactAddress entities.ContactAddress
 	if err := json.NewDecoder(r.Body).Decode(&newContactAddress); err != nil {
 		HandleError(w, err)
 		return
@@ -135,14 +135,14 @@ func UpdateContactAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the contactAddress with the provided ID
-	result := Database.Model(models.ContactAddress{}).Where("id = ?", uuid).Updates(partialContactAddress)
+	result := Database.Model(entities.ContactAddress{}).Where("id = ?", uuid).Updates(partialContactAddress)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return
 	}
 
 	// Retrieve the updated contactAddress
-	var updatedContactAddress models.ContactAddress
+	var updatedContactAddress entities.ContactAddress
 	result = Database.First(&updatedContactAddress, "id = ?", uuid)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -173,7 +173,7 @@ func DeleteContactAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove the contactAddres with the provided ID
-	result := Database.Delete(&models.ContactAddress{}, uuid)
+	result := Database.Delete(&entities.ContactAddress{}, uuid)
 	if result.RowsAffected == 0 {
 		HandleError(w, result.Error)
 		return

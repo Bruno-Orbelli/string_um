@@ -3,12 +3,12 @@ package prod_api
 import (
 	"errors"
 
-	"string_um/string/models"
+	"string_um/string/entities"
 )
 
 // Handler function to handle GET requests directly to database
-func GetOwnUser() (*models.OwnUser, error) {
-	var ownUser models.OwnUser
+func GetOwnUser() (*entities.OwnUser, error) {
+	var ownUser entities.OwnUser
 	result := Database.First(&ownUser)
 	if result.Error != nil {
 		return nil, result.Error
@@ -18,9 +18,9 @@ func GetOwnUser() (*models.OwnUser, error) {
 }
 
 // Handler function to handle CREATE requests directly to database
-func CreateOwnUser(newOwnUser models.OwnUser) (*models.OwnUser, error) {
+func CreateOwnUser(newOwnUser entities.OwnUser) (*entities.OwnUser, error) {
 	// If user already exists, return an error
-	var ownUser models.OwnUser
+	var ownUser entities.OwnUser
 	result := Database.Find(&ownUser)
 	if result.RowsAffected > 0 {
 		return nil, errors.New("ownUser already exists")
@@ -36,15 +36,15 @@ func CreateOwnUser(newOwnUser models.OwnUser) (*models.OwnUser, error) {
 }
 
 // Handler function to handle PUT requests to /ownUser/update/{id} endpoint
-func UpdateOwnUser(id string, partialUser map[string]interface{}) (*models.OwnUser, error) {
+func UpdateOwnUser(id string, partialUser map[string]interface{}) (*entities.OwnUser, error) {
 	// Update the OwnUser with the provided partial data
-	result := Database.Model(models.OwnUser{}).Where("id = ?", id).Updates(partialUser)
+	result := Database.Model(entities.OwnUser{}).Where("id = ?", id).Updates(partialUser)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 
 	// Retrieve the updated ownUser
-	var updatedOwnUser models.OwnUser
+	var updatedOwnUser entities.OwnUser
 	result = Database.First(&updatedOwnUser)
 	if result.Error != nil {
 		return nil, result.Error
@@ -56,7 +56,7 @@ func UpdateOwnUser(id string, partialUser map[string]interface{}) (*models.OwnUs
 // Handler function to handle DELETE requests directly to database
 func DeleteOwnUser() error {
 	// Remove ownUser
-	result := Database.Delete(&models.OwnUser{})
+	result := Database.Delete(&entities.OwnUser{})
 	if result.RowsAffected == 0 {
 		return result.Error
 	}

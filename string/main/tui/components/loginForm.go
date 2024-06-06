@@ -13,11 +13,22 @@ var loginForm = tview.NewForm().SetButtonsAlign(tview.AlignCenter)
 func login() {
 	InfoBoxInstance.SetText("")
 	password := loginForm.GetFormItemByLabel("Password: ").(*tview.InputField).GetText()
-	if err := funcs.Login(password); err != nil {
+	if err := funcs.LoginFirstFactor(password); err != nil {
 		errorMssg := err.Error()
 		globals.LowerTextView.SetText(errorMssg).SetTextColor(tcell.ColorRed)
 		return
 	} else {
+		encoding, err := funcs.CaptureSingleImageEncoding()
+		if err != nil {
+			errorMssg := err.Error()
+			globals.LowerTextView.SetText(errorMssg).SetTextColor(tcell.ColorRed)
+			return
+		}
+		if err := funcs.LoginSecondFactor(password, encoding); err != nil {
+			errorMssg := err.Error()
+			globals.LowerTextView.SetText(errorMssg).SetTextColor(tcell.ColorRed)
+			return
+		}
 		globals.LoginSuccessChan <- true
 		globals.Pages.SwitchToPage("main")
 	}

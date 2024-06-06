@@ -7,8 +7,9 @@ import (
 	"net"
 	"os"
 	prod_api "string_um/string/client/prod-api"
+	"string_um/string/entities"
 	"string_um/string/main/encryption"
-	"string_um/string/models"
+	"string_um/string/main/images"
 	"string_um/string/networking/node"
 	"time"
 
@@ -21,7 +22,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func CreateOwnUser(passwordHash string) (*models.OwnUser, *models.Contact, error) {
+func CreateOwnUser(passwordHash string, imgEncodingHash string) (*entities.OwnUser, *entities.Contact, error) {
 	// fmt.Println("Creating own user...")
 
 	// Generate private key
@@ -43,9 +44,10 @@ func CreateOwnUser(passwordHash string) (*models.OwnUser, *models.Contact, error
 	}
 
 	// Create own user
-	ownUser := models.OwnUser{
+	ownUser := entities.OwnUser{
 		ID:           id.String(),
 		PasswordHash: passwordHash,
+		EncodingHash: imgEncodingHash,
 		PrivateKey:   marshalledKey,
 	}
 
@@ -56,7 +58,7 @@ func CreateOwnUser(passwordHash string) (*models.OwnUser, *models.Contact, error
 	}
 
 	// Create own user contact
-	ownUserContact := models.Contact{
+	ownUserContact := entities.Contact{
 		ID:   createdOwnUser.ID,
 		Name: "Me",
 	}
@@ -135,7 +137,7 @@ func StartHost(ctx context.Context, priv crypto.PrivKey) (host.Host, *dht.IpfsDH
 	return host, dht, nil
 }
 
-func GetOwnUser() (*models.OwnUser, *models.Contact, error) {
+func GetOwnUser() (*entities.OwnUser, *entities.Contact, error) {
 	prod_api.RunDatabaseAPI()
 	// Check if own user exists
 	ownUser, err := prod_api.GetOwnUser()
@@ -155,14 +157,14 @@ func GetOwnUser() (*models.OwnUser, *models.Contact, error) {
 	}
 }
 
-func UpdateOwnUserHash(passwordHash string) error {
+func UpdateOwnUserHashes(passwordHash string, encodingHash string) error {
 	prod_api.RunDatabaseAPI()
 	ownUser, _, err := GetOwnUser()
 	if err != nil {
 		return err
 	}
 
-	params := map[string]interface{}{"password_hash": passwordHash}
+	params := map[string]interface{}{"password_hash": passwordHash, "encoding_hash": encodingHash}
 
 	if _, err := prod_api.UpdateOwnUser(ownUser.ID, params); err != nil {
 		return fmt.Errorf("failed to update own user: %w", err)
@@ -172,7 +174,7 @@ func UpdateOwnUserHash(passwordHash string) error {
 }
 
 func AddMessageToBeSent(chatID uuid.UUID, senderID string, body string) error {
-	message := models.Message{
+	message := entities.Message{
 		ID:          uuid.New(),
 		ChatID:      chatID,
 		AlreadySent: false,
@@ -189,34 +191,104 @@ func AddMessageToBeSent(chatID uuid.UUID, senderID string, body string) error {
 	return nil
 }
 
-func Register(password string) error {
+func CaptureMultipleImagesEncoding(numImg int) ([]float64, error) {
+	// Capture images
+	encodings := make([][]float32, numImg)
+	for i := 0; i < numImg; i++ {
+		img, err := images.CaptureImage()
+		if err != nil {
+			return nil, err
+		}
+
+		// Extract features
+		encoding, err := images.ExtractFeatures(img)
+		if err != nil {
+			return nil, err
+		}
+
+		encodings[i] = encoding
+	}
+
+	// Average encodings
+	avgEncoding := images.AverageEncodings(encodings)
+
+	// Normalize average encoding
+	normalizedEncoding := images.NormalizeEncoding(avgEncoding)
+
+	return normalizedEncoding, nil
+}
+
+func CaptureSingleImageEncoding() ([]float64, error) {
+	// Capture image
+	img, err := images.CaptureImage()
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract features
+	encoding, err := images.ExtractFeatures(img)
+	if err != nil {
+		return nil, err
+	}
+
+	// Normalize encoding
+	normalizedEncoding := images.NormalizeEncoding(encoding)
+
+	return normalizedEncoding, nil
+}
+
+func Register(password string, normalizedEncoding []float64) error {
 	prod_api.RunDatabaseAPI()
 	salt, err := encryption.GenerateSalt("en_salt.txt")
 	if err != nil {
 		return err
 	}
-	hash, err := encryption.HashPassword(password, []byte(salt))
+	passwordHash, err := encryption.HashInput(password, []byte(salt))
 	if err != nil {
 		return err
 	}
-	if _, _, err := CreateOwnUser(hash); err != nil {
+	encodingHash, err := encryption.HashInput(normalizedEncoding, []byte(salt))
+	if err != nil {
+		return err
+	}
+	if _, _, err := CreateOwnUser(passwordHash, encodingHash); err != nil {
 		return err
 	} else {
-		encryption.EncryptFile("test.db", "en_test.db", hash, salt)
+		if err := encryption.EncryptFile("test.db", "en_test.db", encodingHash, salt); err != nil {
+			return err
+		}
+		if err := encryption.EncryptFile("en_test.db", "en_test.db", passwordHash, salt); err != nil {
+			return err
+		}
 		os.Remove("test.db")
 	}
 	return nil
 }
 
-func Login(password string) error {
+func LoginFirstFactor(password string) error {
 	// Get old salt
 	oldSalt, err := encryption.GetSalt("en_salt.txt")
 	if err != nil {
 		return err
 	}
 
-	// Decrypt the database using the derived key
+	// Make the first decription using the password and the old salt
 	if err := encryption.DecryptFile("en_test.db", "test.db", password, oldSalt); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func LoginSecondFactor(password string, normalizedEncoding []float64) error {
+	// Get old salt
+	oldSalt, err := encryption.GetSalt("en_salt.txt")
+	if err != nil {
+		return err
+	}
+
+	// Make the second decryption using the encoding and the old salt
+	if err := encryption.DecryptFile("test.db", "test.db", normalizedEncoding, oldSalt); err != nil {
 		return err
 	}
 
@@ -227,13 +299,19 @@ func Login(password string) error {
 	}
 
 	// Hash the password with the new salt
-	newHash, err := encryption.HashPassword(password, []byte(newSalt))
+	newPasswordHash, err := encryption.HashInput(password, []byte(newSalt))
 	if err != nil {
 		return err
 	}
 
-	// Update the user's hash and salt
-	if err := UpdateOwnUserHash(newHash); err != nil {
+	// Hash the encoding with the new salt
+	newEncodingHash, err := encryption.HashInput(normalizedEncoding, []byte(newSalt))
+	if err != nil {
+		return err
+	}
+
+	// Update the user's password hash and encoding hash
+	if err := UpdateOwnUserHashes(newPasswordHash, newEncodingHash); err != nil {
 		return err
 	}
 
@@ -249,7 +327,10 @@ func CloseDatabase() error {
 	if err != nil {
 		return err
 	}
-	if err := encryption.EncryptFile("test.db", "en_test.db", ownUser.PasswordHash, salt); err != nil {
+	if err := encryption.EncryptFile("test.db", "en_test.db", ownUser.EncodingHash, salt); err != nil {
+		return err
+	}
+	if err := encryption.EncryptFile("en_test.db", "en_test.db", ownUser.PasswordHash, salt); err != nil {
 		return err
 	}
 	fileInfo, err := os.Stat("test.db")
@@ -263,7 +344,7 @@ func CloseDatabase() error {
 	return nil
 }
 
-func GetContactByName(name string) (*models.Contact, error) {
+func GetContactByName(name string) (*entities.Contact, error) {
 	contacts, err := prod_api.GetContacts(map[string]interface{}{"name": name})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get contacts: %w", err)
@@ -276,7 +357,7 @@ func GetContactByName(name string) (*models.Contact, error) {
 	return &contacts[0], nil
 }
 
-func GetChatsAndInfo() ([]models.ChatDTO, error) {
+func GetChatsAndInfo() ([]entities.ChatDTO, error) {
 	chats, err := prod_api.GetChats(nil)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -285,14 +366,14 @@ func GetChatsAndInfo() ([]models.ChatDTO, error) {
 		return nil, fmt.Errorf("failed to get chats: %w", err)
 	}
 
-	var chatDTOsWithMessages []models.ChatDTO
+	var chatDTOsWithMessages []entities.ChatDTO
 	for _, chat := range chats {
 		contact, err := prod_api.GetContact(chat.ContactID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get contact: %w", err)
 		}
 		// Create chat DTO with messages
-		chatDTO := models.ChatDTO{
+		chatDTO := entities.ChatDTO{
 			ID:          chat.ID,
 			ContactName: contact.Name,
 			Messages:    chat.Messages,
@@ -326,9 +407,9 @@ func GetChatsAndInfo() ([]models.ChatDTO, error) {
 	return nil
 }*/
 
-func GetChatWithContact(contactID string) (*models.Chat, error) {
-	var chats []models.Chat
-	var destContact *models.Contact
+func GetChatWithContact(contactID string) (*entities.Chat, error) {
+	var chats []entities.Chat
+	var destContact *entities.Contact
 
 	// Get contact to send message to.
 	destContact, err := prod_api.GetContact(contactID)
@@ -343,12 +424,12 @@ func GetChatWithContact(contactID string) (*models.Chat, error) {
 		return nil, fmt.Errorf("failed to get chats: %w", err)
 	}
 
-	var chat models.Chat
+	var chat entities.Chat
 	if len(chats) > 1 { // Unexpected number of chats, this should not happen.
 		return nil, fmt.Errorf("fatal: unexpected number of chats for single contact: %s", destContact.Name)
 	} else if len(chats) == 0 { // Chat does not exist, create it.
 		fmt.Printf("Creating new chat with %s.\n", destContact.Name)
-		chat = models.Chat{
+		chat = entities.Chat{
 			ContactID: destContact.ID,
 		}
 		createdChat, err := prod_api.CreateChat(chat)

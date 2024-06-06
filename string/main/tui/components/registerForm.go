@@ -1,7 +1,6 @@
 package components
 
 import (
-	"string_um/string/main/funcs"
 	"string_um/string/main/tui/globals"
 
 	"github.com/gdamore/tcell/v2"
@@ -9,6 +8,7 @@ import (
 )
 
 var registerForm = tview.NewForm().SetButtonsAlign(tview.AlignCenter)
+var password string
 
 func checkPassword() bool {
 	inputedPassword := registerForm.GetFormItemByLabel("Password: ").(*tview.InputField).GetText()
@@ -16,20 +16,14 @@ func checkPassword() bool {
 	return inputedPassword == confirmedPassword
 }
 
-func register() {
+func registerFirstFactor() {
 	inputedPassword := registerForm.GetFormItemByLabel("Password: ").(*tview.InputField).GetText()
 	if !checkPassword() {
 		globals.LowerTextView.SetText("Passwords do not match.").SetTextColor(tcell.ColorRed)
 		return
 	}
-	if err := funcs.Register(inputedPassword); err != nil {
-		errorMssg := err.Error()
-		globals.LowerTextView.SetText(errorMssg).SetTextColor(tcell.ColorRed)
-		return
-	} else {
-		globals.LowerTextView.SetText("Registration successful!").SetTextColor(tcell.ColorGreen)
-		globals.Pages.SwitchToPage("login")
-	}
+	password = inputedPassword
+	globals.Pages.SwitchToPage("imageRegister")
 }
 
 func RegisterForm() *tview.Form {
@@ -40,7 +34,7 @@ func RegisterForm() *tview.Form {
 	registerForm.AddPasswordField("Confirm password: ", "", 30, '*', func(text string) {
 		globals.LowerTextView.SetText("")
 	})
-	registerForm.AddButton("Register", register)
+	registerForm.AddButton("Register", registerFirstFactor)
 	registerForm.SetLabelColor(tcell.NewRGBColor(228, 179, 99)).SetFieldBackgroundColor(tcell.NewRGBColor(224, 223, 213)).SetFieldTextColor(tcell.NewRGBColor(50, 55, 57)).SetButtonBackgroundColor(tcell.NewRGBColor(228, 179, 99)).SetButtonTextColor(tcell.ColorBlack)
 
 	return registerForm

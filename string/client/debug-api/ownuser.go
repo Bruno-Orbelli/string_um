@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"string_um/string/models"
+	"string_um/string/entities"
 )
 
 // Handler function to handle GET requests to /ownUser/{id} endpoint
@@ -15,7 +15,7 @@ func GetOwnUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ownUser models.OwnUser
+	var ownUser entities.OwnUser
 	result := Database.First(&ownUser)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -34,7 +34,7 @@ func CreateOwnUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If user already exists, return an error
-	var ownUser models.OwnUser
+	var ownUser entities.OwnUser
 	result := Database.Find(&ownUser)
 	if result.RowsAffected > 0 {
 		HandleError(w, errors.New("ownUser already exists"))
@@ -42,7 +42,7 @@ func CreateOwnUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse JSON request body into a OwnUser struct
-	var newOwnUser models.OwnUser
+	var newOwnUser entities.OwnUser
 	if err := json.NewDecoder(r.Body).Decode(&newOwnUser); err != nil {
 		HandleError(w, err)
 		return
@@ -82,7 +82,7 @@ func CreateOwnUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the ownUser with the provided ID
-	var updatedOwnUser models.OwnUser
+	var updatedOwnUser entities.OwnUser
 	result := Database.Model(&updatedOwnUser).Where("id = ?", r.PathValue("id")).Updates(partialOwnUser)
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
@@ -106,7 +106,7 @@ func DeleteOwnUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove ownUser
-	result := Database.Delete(&models.OwnUser{})
+	result := Database.Delete(&entities.OwnUser{})
 	if result.RowsAffected == 0 {
 		HandleError(w, result.Error)
 		return

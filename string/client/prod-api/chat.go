@@ -1,15 +1,15 @@
 package prod_api
 
 import (
-	"string_um/string/models"
+	"string_um/string/entities"
 
 	"github.com/google/uuid"
 )
 
 // Handler function to handle GET requests directly to database
-func GetChats(params map[string]interface{}) ([]models.Chat, error) {
+func GetChats(params map[string]interface{}) ([]entities.Chat, error) {
 	// Filter the Chats slice based on the parameters
-	var filteredChats []models.Chat
+	var filteredChats []entities.Chat
 	result := Database.Preload("Messages").Where(params).Find(&filteredChats)
 	if result.Error != nil {
 		return nil, result.Error
@@ -19,8 +19,8 @@ func GetChats(params map[string]interface{}) ([]models.Chat, error) {
 }
 
 // Handler function to handle GET requests directly to database
-func GetChat(id uuid.UUID) (*models.Chat, error) {
-	var chat models.Chat
+func GetChat(id uuid.UUID) (*entities.Chat, error) {
+	var chat entities.Chat
 	result := Database.Preload("Messages").First(&chat, "id = ?", id)
 	if result.Error != nil {
 		return nil, result.Error
@@ -30,7 +30,7 @@ func GetChat(id uuid.UUID) (*models.Chat, error) {
 }
 
 // Handler function to handle CREATE requests directly to database
-func CreateChat(newChat models.Chat) (*models.Chat, error) {
+func CreateChat(newChat entities.Chat) (*entities.Chat, error) {
 	// Generate a new UUID for the chat if not provided
 	if newChat.ID == uuid.Nil {
 		newChat.ID = uuid.New()
@@ -46,15 +46,15 @@ func CreateChat(newChat models.Chat) (*models.Chat, error) {
 }
 
 // Handler function to handle UPDATE requests directly to database
-func UpdateChat(id uuid.UUID, partialChat map[string]interface{}) (*models.Chat, error) {
+func UpdateChat(id uuid.UUID, partialChat map[string]interface{}) (*entities.Chat, error) {
 	// Update the chat with the provided ID
-	result := Database.Preload("Messages").Model(models.Chat{}).Where("id = ?", id).Updates(partialChat)
+	result := Database.Preload("Messages").Model(entities.Chat{}).Where("id = ?", id).Updates(partialChat)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 
 	// Retrieve the updated chat
-	var updatedChat models.Chat
+	var updatedChat entities.Chat
 	result = Database.Preload("Messages").First(&updatedChat, "id = ?", id)
 	if result.Error != nil {
 		return nil, result.Error
@@ -66,7 +66,7 @@ func UpdateChat(id uuid.UUID, partialChat map[string]interface{}) (*models.Chat,
 // Handler function to handle DELETE requests directly to database
 func DeleteChat(id uuid.UUID) error {
 	// Remove the chat with the provided ID
-	result := Database.Delete(&models.Chat{}, id)
+	result := Database.Delete(&entities.Chat{}, id)
 	if result.RowsAffected == 0 {
 		return result.Error
 	}

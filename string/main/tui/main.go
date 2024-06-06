@@ -5,11 +5,11 @@ import (
 	"os"
 	"os/signal"
 	prod_api "string_um/string/client/prod-api"
+	"string_um/string/entities"
 	"string_um/string/main/funcs"
 	"string_um/string/main/tui/components"
 	"string_um/string/main/tui/globals"
 	pag "string_um/string/main/tui/pages"
-	"string_um/string/models"
 	"syscall"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -34,7 +34,7 @@ func isRegistered() []bool {
 	return boolArr
 }
 
-func startHost(ctx context.Context, ownUser models.OwnUser) (host.Host, error) {
+func startHost(ctx context.Context, ownUser entities.OwnUser) (host.Host, error) {
 	privKey, err := crypto.UnmarshalPrivateKey(ownUser.PrivateKey)
 	if err != nil {
 		return nil, err
@@ -60,6 +60,7 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 
 	globals.Pages.AddPage("register", pag.BuildRegisterPage(), true, boolForReg[0])
+	globals.Pages.AddPage("imageRegister", pag.BuildImageRegisterPage(), true, false)
 	globals.Pages.AddPage("login", pag.BuildLoginPage(), true, boolForReg[1])
 	globals.Pages.AddPage("main", pag.BuildMainPage(app, sigChan), true, false)
 

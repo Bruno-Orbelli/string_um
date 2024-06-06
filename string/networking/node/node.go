@@ -7,13 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"slices"
 	"time"
 
 	prod_api "string_um/string/client/prod-api"
+	"string_um/string/entities"
 	"string_um/string/main/flags"
 	"string_um/string/main/tui/globals"
-	"string_um/string/models"
 	boots "string_um/string/networking/bootstrap"
 	"string_um/string/networking/mdns"
 
@@ -41,8 +40,8 @@ func handleStream(stream network.Stream) {
 	go readMessage(reader)
 }
 
-func unmarshallMessage(str string) (*models.Message, error) {
-	var message models.Message
+func unmarshallMessage(str string) (*entities.Message, error) {
+	var message entities.Message
 	err := json.Unmarshal([]byte(str), &message)
 	if err != nil {
 		return nil, err
@@ -50,7 +49,7 @@ func unmarshallMessage(str string) (*models.Message, error) {
 	return &message, nil
 }
 
-func alterAndSaveMessage(message models.Message) {
+func alterAndSaveMessage(message entities.Message) {
 	// Alter message to appear as sent
 	message.AlreadySent = true
 	if _, err := prod_api.CreateMessage(message); err != nil {
@@ -84,7 +83,7 @@ func readMessage(r *bufio.Reader) {
 	}
 }
 
-func writeMessage(w *bufio.Writer, message models.Message) error {
+func writeMessage(w *bufio.Writer, message entities.Message) error {
 	for i := 0; i < 5; i++ {
 		if err := json.NewEncoder(w).Encode(message); err != nil {
 			// fmt.Printf("Failed to write message, retrying after %f second/s.\n", math.Pow(float64(i+1), 2))
@@ -335,10 +334,7 @@ func AddKnownAddressesForContact(host host.Host, contactID string) error {
 	}
 
 	for _, addr := range knownAddrs {
-		if slices.Contains(existingMaddrs, addr) { // Address already exists
-			continue
-		}
-		newAddr := models.ContactAddress{
+		newAddr := entities.ContactAddress{
 			ContactID:       contactID,
 			ObservedAddress: addr.String(),
 			ObservedAt:      time.Now(),
@@ -382,7 +378,7 @@ func AddNewContact(host host.Host, contactID string, contactName string) error {
 		}
 		// Conditions to add or update contact
 		if contact == nil { // Add the contact to the database
-			newContact := models.Contact{
+			newContact := entities.Contact{
 				ID:   decodedContactID.String(),
 				Name: contactName,
 			}
@@ -419,7 +415,7 @@ func AddNewContact(host host.Host, contactID string, contactName string) error {
 	return nil // Contact now exists with custom name or has been updated
 }
 
-func SaveContactIfNotExists(contactID string) (*models.Contact, error) {
+func SaveContactIfNotExists(contactID string) (*entities.Contact, error) {
 	// TODO: Better error handling
 	// Check if contact exists
 	contact, err := prod_api.GetContact(contactID)
@@ -430,7 +426,7 @@ func SaveContactIfNotExists(contactID string) (*models.Contact, error) {
 	if contact != nil {
 		return contact, nil
 	} else { // Contact doesn't exist, create it
-		contact := models.Contact{
+		contact := entities.Contact{
 			ID:   contactID,
 			Name: contactID,
 		}
@@ -458,7 +454,7 @@ func openNewChatIfNotExists(chatID uuid.UUID, contactID string) error {
 	}
 
 	// Check if chat already exists
-	var chat *models.Chat
+	var chat *entities.Chat
 	for i := 0; i < 6; i++ {
 		chat, err = prod_api.GetChat(chatID)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -477,7 +473,7 @@ func openNewChatIfNotExists(chatID uuid.UUID, contactID string) error {
 		return errors.New("chat mismatch: chat already exists but is associated with another contact") // In theory, this should never happen due to UUIDs being unique
 	} else if chat == nil { // Chat doesn't exist, create it
 		// fmt.Printf("Creating new chat with %s.\n", contact.Name)
-		chat := models.Chat{
+		chat := entities.Chat{
 			ID:        chatID,
 			ContactID: contact.ID,
 		}

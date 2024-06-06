@@ -27,5 +27,5 @@ go.work
 en_salt.txt
 
 # OpenCV
-opencv-4.x/*
-build/*
+*/opencv*
+*/build

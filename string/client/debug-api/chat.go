@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"string_um/string/models"
+	"string_um/string/entities"
 
 	"errors"
 
@@ -35,7 +35,7 @@ func GetChats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter the Chats slice based on the query parameters
-	var filteredChats []models.Chat
+	var filteredChats []entities.Chat
 	result := Database.Preload("Messages").Where(filter).Find(&filteredChats)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -66,7 +66,7 @@ func GetChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var chat models.Chat
+	var chat entities.Chat
 	result := Database.Preload("Messages").First(&chat, "id = ?", uuid)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -85,7 +85,7 @@ func CreateChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse JSON request body into a Chat struct
-	var newChat models.Chat
+	var newChat entities.Chat
 	if err := json.NewDecoder(r.Body).Decode(&newChat); err != nil {
 		HandleError(w, err)
 		return
@@ -137,14 +137,14 @@ func UpdateChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the chat with the provided ID
-	result := Database.Preload("Messages").Model(models.Chat{}).Where("id = ?", uuid).Updates(partialChat)
+	result := Database.Preload("Messages").Model(entities.Chat{}).Where("id = ?", uuid).Updates(partialChat)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return
 	}
 
 	// Retrieve the updated chat
-	var updatedChat models.Chat
+	var updatedChat entities.Chat
 	result = Database.Preload("Messages").First(&updatedChat, "id = ?", uuid)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -175,7 +175,7 @@ func DeleteChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove the chat with the provided ID
-	result := Database.Delete(&models.Chat{}, uuid)
+	result := Database.Delete(&entities.Chat{}, uuid)
 	if result.RowsAffected == 0 {
 		HandleError(w, result.Error)
 		return

@@ -1,10 +1,10 @@
 package main
 
-import (
+/* import (
 	"errors"
 	"fmt"
 	"os"
-	"string_um/string/models"
+	"string_um/string/entities"
 	"time"
 
 	prod_api "string_um/string/client/prod-api"
@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func createOwnUser() (*models.OwnUser, *models.Contact, error) {
+func createOwnUser() (*entities.OwnUser, *entities.Contact, error) {
 	fmt.Println("Creating own user...")
 
 	// Generate private key
@@ -38,7 +38,7 @@ func createOwnUser() (*models.OwnUser, *models.Contact, error) {
 	}
 
 	// Create own user
-	ownUser := models.OwnUser{
+	ownUser := entities.OwnUser{
 		ID:         id.String(),
 		PrivateKey: marshalledKey,
 	}
@@ -50,7 +50,7 @@ func createOwnUser() (*models.OwnUser, *models.Contact, error) {
 	}
 
 	// Create own user contact
-	ownUserContact := models.Contact{
+	ownUserContact := entities.Contact{
 		ID:   createdOwnUser.ID,
 		Name: "Me",
 	}
@@ -64,7 +64,7 @@ func createOwnUser() (*models.OwnUser, *models.Contact, error) {
 	return createdOwnUser, createdOwnContact, nil
 }
 
-func getOwnUserIfExists() (*models.OwnUser, *models.Contact, error) {
+func getOwnUserIfExists() (*entities.OwnUser, *entities.Contact, error) {
 	// Check if own user exists
 	ownUser, err := prod_api.GetOwnUser()
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -84,7 +84,7 @@ func getOwnUserIfExists() (*models.OwnUser, *models.Contact, error) {
 }
 
 func addMessageToBeSent(chatID uuid.UUID, senderID string, body string) error {
-	message := models.Message{
+	message := entities.Message{
 		ID:          uuid.New(),
 		ChatID:      chatID,
 		AlreadySent: false,
@@ -124,9 +124,9 @@ func initDatabase(password string) error {
 	return nil
 }
 
-func getChatWithContact(contactID string) (*models.Chat, error) {
-	var chats []models.Chat
-	var destContact *models.Contact
+func getChatWithContact(contactID string) (*entities.Chat, error) {
+	var chats []entities.Chat
+	var destContact *entities.Contact
 
 	// Get contact to send message to.
 	destContact, err := prod_api.GetContact(contactID)
@@ -141,12 +141,12 @@ func getChatWithContact(contactID string) (*models.Chat, error) {
 		return nil, fmt.Errorf("failed to get chats: %w", err)
 	}
 
-	var chat models.Chat
+	var chat entities.Chat
 	if len(chats) > 1 { // Unexpected number of chats, this should not happen.
 		return nil, fmt.Errorf("fatal: unexpected number of chats for single contact: %s", destContact.Name)
 	} else if len(chats) == 0 { // Chat does not exist, create it.
 		fmt.Printf("Creating new chat with %s.\n", destContact.Name)
-		chat = models.Chat{
+		chat = entities.Chat{
 			ContactID: destContact.ID,
 		}
 		createdChat, err := prod_api.CreateChat(chat)
@@ -161,7 +161,7 @@ func getChatWithContact(contactID string) (*models.Chat, error) {
 	return &chat, nil
 }
 
-/*func main() {
+func main() {
 	// Parse the command line arguments.
 	config, err := flags.ParseFlags()
 	if err != nil {
@@ -326,4 +326,4 @@ func runApplication(ctx context.Context, config flags.Config) error {
 	<-ctx.Done()
 
 	return nil
-}*/
+} */

@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"fmt"
 	"io"
 	"os"
 
@@ -18,29 +19,52 @@ func HashPassword(password string, saltBytes []byte) (string, error) {
 	return string(hash), nil
 }
 
-func GetSalt(saltFile string) (string, error) {
-	salt, err := os.ReadFile(saltFile)
+func HashInput(input interface{}, saltBytes []byte) (string, error) {
+	// Adapt the input if needed
+	var adaptedInput []byte
+	switch v := input.(type) {
+	case string:
+		adaptedInput = []byte(v)
+	case []float64:
+		for _, val := range v {
+			newVal := byte(val)
+			adaptedInput = append(adaptedInput, newVal)
+		}
+	default:
+		return "", fmt.Errorf("invalid input type")
+	}
+
+	// Hash the input
+	hash, err := scrypt.Key(adaptedInput, saltBytes, 32768, 8, 1, 32)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+func GetSalt(saltPath string) (string, error) {
+	salt, err := os.ReadFile(saltPath)
 	if err != nil {
 		return "", err
 	}
 	return string(salt), nil
 }
 
-func GenerateSalt(saltFile string) (string, error) {
+func GenerateSalt(saltPath string) (string, error) {
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(saltFile, salt, 0644); err != nil {
+	if err := os.WriteFile(saltPath, salt, 0644); err != nil {
 		return "", err
 	}
 	return string(salt), nil
 }
 
-// GenerateKey derives a key from a passphrase using scrypt
-func GenerateKey(passphraseHash string, salt string) ([]byte, error) {
+// GenerateKey derives a key from a hash using scrypt
+func GenerateKey(hash string, salt string) ([]byte, error) {
 	saltBytes := []byte(salt) // should be securely stored/retrieved
-	key, err := scrypt.Key([]byte(passphraseHash), saltBytes, 32768, 8, 1, 32)
+	key, err := scrypt.Key([]byte(hash), saltBytes, 32768, 8, 1, 32)
 	if err != nil {
 		return nil, err
 	}
@@ -48,9 +72,9 @@ func GenerateKey(passphraseHash string, salt string) ([]byte, error) {
 }
 
 // EncryptFile encrypts the input file and writes to the output file
-func EncryptFile(inputFile, outputFile, passphraseHash, salt string) error {
+func EncryptFile(inputFile, outputFile, hash, salt string) error {
 	// Generate encryption key
-	key, err := GenerateKey(passphraseHash, salt)
+	key, err := GenerateKey(hash, salt)
 	if err != nil {
 		return err
 	}
@@ -91,15 +115,15 @@ func EncryptFile(inputFile, outputFile, passphraseHash, salt string) error {
 }
 
 // DecryptFile decrypts the input file and writes to the output file
-func DecryptFile(inputFile string, outputFile string, passphrase string, salt string) error {
-	// Hash the passphrase
-	passphraseHash, err := HashPassword(passphrase, []byte(salt))
+func DecryptFile(inputFile string, outputFile string, input interface{}, salt string) error {
+	// Hash the input
+	hash, err := HashInput(input, []byte(salt))
 	if err != nil {
 		return err
 	}
 
 	// Generate encryption key
-	key, err := GenerateKey(passphraseHash, salt)
+	key, err := GenerateKey(hash, salt)
 	if err != nil {
 		return err
 	}
