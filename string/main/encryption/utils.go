@@ -4,20 +4,24 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"os"
 
 	"golang.org/x/crypto/scrypt"
 )
 
-func HashPassword(password string, saltBytes []byte) (string, error) {
-	hash, err := scrypt.Key([]byte(password), saltBytes, 32768, 8, 1, 32)
+/* func HashPassword(password string, saltBytes []byte) (string, error) {
+	hash, err := scrypt.Key()
 	if err != nil {
 		return "", err
 	}
 	return string(hash), nil
-}
+} */
 
 func HashInput(input interface{}, saltBytes []byte) (string, error) {
 	// Adapt the input if needed
@@ -25,21 +29,19 @@ func HashInput(input interface{}, saltBytes []byte) (string, error) {
 	switch v := input.(type) {
 	case string:
 		adaptedInput = []byte(v)
-	case []float64:
-		for _, val := range v {
-			newVal := byte(val)
-			adaptedInput = append(adaptedInput, newVal)
+	case []float32:
+		adaptedInput = make([]byte, len(v)*4)
+		for i, f := range v {
+			binary.LittleEndian.PutUint32(adaptedInput[i*4:], math.Float32bits(f))
 		}
 	default:
 		return "", fmt.Errorf("invalid input type")
 	}
 
 	// Hash the input
-	hash, err := scrypt.Key(adaptedInput, saltBytes, 32768, 8, 1, 32)
-	if err != nil {
-		return "", err
-	}
-	return string(hash), nil
+	hash := sha256.New()
+	hash.Write(adaptedInput)
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func GetSalt(saltPath string) (string, error) {

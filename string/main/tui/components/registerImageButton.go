@@ -9,7 +9,7 @@ import (
 )
 
 func registerSecondFactor() {
-	capturedEncoding, err := funcs.CaptureMultipleImagesEncoding(3)
+	capturedEncoding, err := funcs.CaptureMultipleImagesEncoding(15)
 	if err != nil {
 		errorMssg := err.Error()
 		globals.LowerTextView.SetText(errorMssg).SetTextColor(tcell.ColorRed)

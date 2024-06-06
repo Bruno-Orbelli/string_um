@@ -191,7 +191,7 @@ func AddMessageToBeSent(chatID uuid.UUID, senderID string, body string) error {
 	return nil
 }
 
-func CaptureMultipleImagesEncoding(numImg int) ([]float64, error) {
+func CaptureMultipleImagesEncoding(numImg int) ([]float32, error) {
 	// Capture images
 	encodings := make([][]float32, numImg)
 	for i := 0; i < numImg; i++ {
@@ -200,33 +200,51 @@ func CaptureMultipleImagesEncoding(numImg int) ([]float64, error) {
 			return nil, err
 		}
 
-		// Extract features
-		encoding, err := images.ExtractFeatures(img)
+		// Detect, resize and scale image
+		rescaled, err := images.DetectAlignAndRescale(img)
 		if err != nil {
 			return nil, err
 		}
 
-		encodings[i] = encoding
+		// Grayscale image and histogram
+		grayscale := images.GrayScaleAndEqualizeHist(rescaled)
+
+		// Extract features
+		encoding, err := images.ExtractFeatures(grayscale)
+		if err != nil {
+			return nil, err
+		}
+
+		// Normalize encoding
+		normalized := images.NormalizeEncoding(encoding)
+
+		encodings[i] = normalized
 	}
 
 	// Average encodings
 	avgEncoding := images.AverageEncodings(encodings)
 
-	// Normalize average encoding
-	normalizedEncoding := images.NormalizeEncoding(avgEncoding)
-
-	return normalizedEncoding, nil
+	return images.RoundEncoding(avgEncoding), nil
 }
 
-func CaptureSingleImageEncoding() ([]float64, error) {
+func CaptureSingleImageEncoding() ([]float32, error) {
 	// Capture image
 	img, err := images.CaptureImage()
 	if err != nil {
 		return nil, err
 	}
 
+	// Detect, resize and scale image
+	rescaled, err := images.DetectAlignAndRescale(img)
+	if err != nil {
+		return nil, err
+	}
+
+	// Grayscale image and histogram
+	grayscale := images.GrayScaleAndEqualizeHist(rescaled)
+
 	// Extract features
-	encoding, err := images.ExtractFeatures(img)
+	encoding, err := images.ExtractFeatures(grayscale)
 	if err != nil {
 		return nil, err
 	}
@@ -234,10 +252,10 @@ func CaptureSingleImageEncoding() ([]float64, error) {
 	// Normalize encoding
 	normalizedEncoding := images.NormalizeEncoding(encoding)
 
-	return normalizedEncoding, nil
+	return images.RoundEncoding(normalizedEncoding), nil
 }
 
-func Register(password string, normalizedEncoding []float64) error {
+func Register(password string, normalizedEncoding []float32) error {
 	prod_api.RunDatabaseAPI()
 	salt, err := encryption.GenerateSalt("en_salt.txt")
 	if err != nil {
@@ -280,7 +298,7 @@ func LoginFirstFactor(password string) error {
 	return nil
 }
 
-func LoginSecondFactor(password string, normalizedEncoding []float64) error {
+func LoginSecondFactor(password string, normalizedEncoding []float32) error {
 	// Get old salt
 	oldSalt, err := encryption.GetSalt("en_salt.txt")
 	if err != nil {

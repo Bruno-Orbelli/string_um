@@ -18,7 +18,7 @@ func login() {
 		globals.LowerTextView.SetText(errorMssg).SetTextColor(tcell.ColorRed)
 		return
 	} else {
-		encoding, err := funcs.CaptureSingleImageEncoding()
+		encoding, err := funcs.CaptureMultipleImagesEncoding(15)
 		if err != nil {
 			errorMssg := err.Error()
 			globals.LowerTextView.SetText(errorMssg).SetTextColor(tcell.ColorRed)
