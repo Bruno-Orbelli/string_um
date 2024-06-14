@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"string_um/string/models"
+	"string_um/string/entities"
 )
 
 // Handler function to handle GET requests to /contacts endpoint
@@ -32,7 +32,7 @@ func GetContacts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter contacts based on the query parameters
-	var filteredContacts []models.Contact
+	var filteredContacts []entities.Contact
 	result := Database.Preload("ContactAddresses").Preload("Chat").Where(filter).Find(&filteredContacts)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -56,7 +56,7 @@ func GetContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var contact models.Contact
+	var contact entities.Contact
 	result := Database.Preload("ContactAddresses").Preload("Chat").First(&contact, "id = ?", r.PathValue("id"))
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -75,7 +75,7 @@ func CreateContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse JSON request body into a Contact struct
-	var newContact models.Contact
+	var newContact entities.Contact
 	if err := json.NewDecoder(r.Body).Decode(&newContact); err != nil {
 		HandleError(w, err)
 		return
@@ -115,14 +115,14 @@ func UpdateContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the contact with the provided ID
-	result := Database.Preload("ContactAddresses").Preload("Chat").Model(models.Contact{}).Where("id = ?", r.PathValue("id")).Updates(partialContact)
+	result := Database.Preload("ContactAddresses").Preload("Chat").Model(entities.Contact{}).Where("id = ?", r.PathValue("id")).Updates(partialContact)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return
 	}
 
 	// Retrieve the updated contact
-	var updatedContact models.Contact
+	var updatedContact entities.Contact
 	result = Database.Preload("ContactAddresses").Preload("Chat").First(&updatedContact, "id = ?", r.PathValue("id"))
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -147,7 +147,7 @@ func DeleteContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove the contact with the provided ID
-	result := Database.Delete(&models.Contact{}, r.PathValue("id"))
+	result := Database.Delete(&entities.Contact{}, r.PathValue("id"))
 	if result.RowsAffected == 0 {
 		HandleError(w, result.Error)
 		return

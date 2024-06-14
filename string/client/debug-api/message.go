@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"string_um/string/models"
+	"string_um/string/entities"
 
 	"errors"
 
@@ -35,7 +35,7 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter the Messages based on the query parameters
-	var filteredMessages []models.Message
+	var filteredMessages []entities.Message
 	result := Database.Where(filter).Find(&filteredMessages)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -66,7 +66,7 @@ func GetMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var message models.Message
+	var message entities.Message
 	result := Database.First(&message, "id = ?", uuid)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -85,7 +85,7 @@ func CreateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse JSON request body into a Message struct
-	var newMessage models.Message
+	var newMessage entities.Message
 	if err := json.NewDecoder(r.Body).Decode(&newMessage); err != nil {
 		HandleError(w, err)
 		return
@@ -135,14 +135,14 @@ func UpdateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the message with the provided ID
-	result := Database.Model(models.Message{}).Where("id = ?", uuid).Updates(partialMessage)
+	result := Database.Model(entities.Message{}).Where("id = ?", uuid).Updates(partialMessage)
 	if result.Error != nil {
 		HandleError(w, result.Error)
 		return
 	}
 
 	// Retrieve the updated message
-	var updatedMessage models.Message
+	var updatedMessage entities.Message
 	result = Database.First(&updatedMessage, "id = ?", uuid)
 	if result.Error != nil {
 		HandleError(w, result.Error)
@@ -173,7 +173,7 @@ func DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove the message with the provided ID
-	result := Database.Delete(&models.Message{}, uuid)
+	result := Database.Delete(&entities.Message{}, uuid)
 	if result.RowsAffected == 0 {
 		HandleError(w, result.Error)
 		return

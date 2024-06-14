@@ -7,6 +7,7 @@ require github.com/gdamore/tcell/v2 v2.7.4 // indirect
 require github.com/libp2p/go-libp2p v0.35.0
 
 require (
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect

@@ -1,15 +1,15 @@
 package prod_api
 
 import (
-	"string_um/string/models"
+	"string_um/string/entities"
 
 	"github.com/google/uuid"
 )
 
 // Handler function to handle GET requests directly to database
-func GetContactAddresses(params map[string]interface{}) ([]models.ContactAddress, error) {
+func GetContactAddresses(params map[string]interface{}) ([]entities.ContactAddress, error) {
 	// Filter the ContactAddresses slice based on the parameters
-	var filteredContactAddresses []models.ContactAddress
+	var filteredContactAddresses []entities.ContactAddress
 	result := Database.Where(params).Find(&filteredContactAddresses)
 	if result.Error != nil {
 		return nil, result.Error
@@ -19,8 +19,8 @@ func GetContactAddresses(params map[string]interface{}) ([]models.ContactAddress
 }
 
 // Handler function to handle GET requests directly to database
-func GetContactAddress(id uuid.UUID) (*models.ContactAddress, error) {
-	var contactAddress models.ContactAddress
+func GetContactAddress(id uuid.UUID) (*entities.ContactAddress, error) {
+	var contactAddress entities.ContactAddress
 	result := Database.First(&contactAddress, "id = ?", id)
 	if result.Error != nil {
 		return nil, result.Error
@@ -30,7 +30,7 @@ func GetContactAddress(id uuid.UUID) (*models.ContactAddress, error) {
 }
 
 // Handler function to handle CREATE requests directly to database
-func CreateContactAddress(newContactAddress models.ContactAddress) (*models.ContactAddress, error) {
+func CreateContactAddress(newContactAddress entities.ContactAddress) (*entities.ContactAddress, error) {
 	// Generate a new UUID for the contactAddress if not provided
 	if newContactAddress.ID == uuid.Nil {
 		newContactAddress.ID = uuid.New()
@@ -46,15 +46,15 @@ func CreateContactAddress(newContactAddress models.ContactAddress) (*models.Cont
 }
 
 // Handler function to handle UPDATE requests directly to database
-func UpdateContactAddress(id uuid.UUID, partialContactAddress map[string]interface{}) (*models.ContactAddress, error) {
+func UpdateContactAddress(id uuid.UUID, partialContactAddress map[string]interface{}) (*entities.ContactAddress, error) {
 	// Update the contactAddress with the provided ID
-	result := Database.Model(models.ContactAddress{}).Where("id = ?", id).Updates(partialContactAddress)
+	result := Database.Model(entities.ContactAddress{}).Where("id = ?", id).Updates(partialContactAddress)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 
 	// Retrieve the updated contactAddress
-	var updatedContactAddress models.ContactAddress
+	var updatedContactAddress entities.ContactAddress
 	result = Database.First(&updatedContactAddress, "id = ?", id)
 	if result.Error != nil {
 		return nil, result.Error
@@ -66,7 +66,7 @@ func UpdateContactAddress(id uuid.UUID, partialContactAddress map[string]interfa
 // Handler function to handle DELETE requests directly to database
 func DeleteContactAddress(id uuid.UUID) error {
 	// Remove the contactAddress with the provided ID
-	result := Database.Delete(&models.ContactAddress{}, id)
+	result := Database.Delete(&entities.ContactAddress{}, id)
 	if result.RowsAffected == 0 {
 		return result.Error
 	}

@@ -9,11 +9,13 @@ import (
 
 var LowerTextView = tview.NewTextView().SetTextAlign(tview.AlignCenter)
 var Pages = tview.NewPages()
+var OwnUserHash = ""
 
 var ChatsReadyChan = make(chan bool, 1)
 var ChatsRefreshedChan = make(chan bool, 1)
 var LoginSuccessChan = make(chan bool, 1)
 var MessagesRefreshedChan = make(chan bool, 1)
+var OwnInfoAvailableChan = make(chan bool, 1)
 
 func LoadTitle() []byte {
 	path := filepath.Join(".", "resources", "string.txt")

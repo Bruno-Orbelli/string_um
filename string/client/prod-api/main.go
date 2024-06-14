@@ -2,7 +2,7 @@ package prod_api
 
 import (
 	"fmt"
-	"string_um/string/models"
+	"string_um/string/entities"
 
 	_ "github.com/mattn/go-sqlite3"
 	"gorm.io/driver/sqlite"
@@ -24,11 +24,11 @@ func RunDatabaseAPI() {
 
 	// Auto-migrate the database
 	if err = Database.AutoMigrate(
-		&models.Chat{},
-		&models.Contact{},
-		&models.ContactAddress{},
-		&models.Message{},
-		&models.OwnUser{},
+		&entities.Chat{},
+		&entities.Contact{},
+		&entities.ContactAddress{},
+		&entities.Message{},
+		&entities.OwnUser{},
 	); err != nil {
 		panic(fmt.Sprintf("Failed to auto-migrate database: %v", err))
 	}
