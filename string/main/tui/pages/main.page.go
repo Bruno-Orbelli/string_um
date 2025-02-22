@@ -33,6 +33,7 @@ func mainLoop(sigChan chan os.Signal, app *tview.Application) {
 		case <-globals.ChatsReadyChan:
 			app.QueueUpdateDraw(updateChatList)
 			funcs.AddContactAddressesForUnknownContacts(components.Libp2pHost)
+			components.Contacts = getContacts()
 		case <-globals.ChatsRefreshedChan:
 			app.QueueUpdateDraw(updateChatList)
 			funcs.AddContactAddressesForUnknownContacts(components.Libp2pHost)
@@ -41,10 +42,23 @@ func mainLoop(sigChan chan os.Signal, app *tview.Application) {
 			if selectedChatID != nil {
 				app.QueueUpdateDraw(displayMessages)
 			}
+		case <-globals.ContactsRefreshedChan:
+			components.Contacts = getContacts()
 		case <-sigChan:
 			return
 		}
 	}
+}
+
+func getContacts() []entities.Contact {
+	contacts, err := funcs.GetAddedContacts()
+	if err != nil {
+		panic(err)
+	}
+	if contacts == nil {
+		return []entities.Contact{}
+	}
+	return contacts
 }
 
 func getChats() []entities.ChatDTO {

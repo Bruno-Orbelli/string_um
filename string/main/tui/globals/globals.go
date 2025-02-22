@@ -16,6 +16,7 @@ var ChatsRefreshedChan = make(chan bool, 1)
 var LoginSuccessChan = make(chan bool, 1)
 var MessagesRefreshedChan = make(chan bool, 1)
 var OwnInfoAvailableChan = make(chan bool, 1)
+var ContactsRefreshedChan = make(chan bool, 1)
 
 func LoadTitle() []byte {
 	path := filepath.Join(".", "resources", "string.txt")
