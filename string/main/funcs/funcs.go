@@ -247,11 +247,22 @@ func CloseDatabase() error {
 	}
 	salt, err := encryption.GetSalt("en_salt.txt")
 	if err != nil {
+		if os.IsNotExist(err) {
+			rmTestDB()
+			return nil
+		}
 		return err
 	}
-	if err := encryption.EncryptFile("test.db", "en_test.db", ownUser.PasswordHash, salt); err != nil {
-		return err
+	if ownUser != nil {
+		if err := encryption.EncryptFile("test.db", "en_test.db", ownUser.PasswordHash, salt); err != nil {
+			return err
+		}
 	}
+	rmTestDB()
+	return nil
+}
+
+func rmTestDB() error {
 	fileInfo, err := os.Stat("test.db")
 	if err != nil {
 		return err
@@ -361,4 +372,20 @@ func GetChatWithContact(contactID string) (*entities.Chat, error) {
 	}
 
 	return &chat, nil
+}
+
+func GetAddedContacts() ([]entities.Contact, error) {
+	contacts, err := prod_api.GetContacts(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get contacts: %w", err)
+	}
+
+	for _, contact := range contacts {
+		if contact.Name == "Me" {
+			contacts = append(contacts[:0], contacts[1:]...)
+			break
+		}
+	}
+
+	return contacts, nil
 }

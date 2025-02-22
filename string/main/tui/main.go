@@ -64,19 +64,23 @@ func main() {
 	globals.Pages.AddPage("main", pag.BuildMainPage(app, sigChan), true, false)
 
 	go func() { // Wait for login to be successful and get private key for node setup
-		<-globals.LoginSuccessChan
-		ownUser, _, err := funcs.GetOwnUser()
-		if err != nil {
-			panic(err)
+		select {
+		case <-sigChan:
+			return
+		case <-globals.LoginSuccessChan:
+			ownUser, _, err := funcs.GetOwnUser()
+			if err != nil {
+				panic(err)
+			}
+			globals.OwnUserHash = ownUser.ID
+			globals.OwnInfoAvailableChan <- true
+			host, err := startHost(ctx, *ownUser)
+			if err != nil {
+				panic(err)
+			}
+			components.Libp2pHost = host
+			globals.ChatsReadyChan <- true
 		}
-		globals.OwnUserHash = ownUser.ID
-		globals.OwnInfoAvailableChan <- true
-		host, err := startHost(ctx, *ownUser)
-		if err != nil {
-			panic(err)
-		}
-		components.Libp2pHost = host
-		globals.ChatsReadyChan <- true
 	}()
 
 	go func() {

@@ -32,6 +32,7 @@ func addContact() {
 		InfoBoxInstance.Clear()
 		UpdateInfo(false, "Contact added.")
 		globals.ChatsRefreshedChan <- true
+		globals.ContactsRefreshedChan <- true
 		addContactForm.GetFormItemByLabel("Name: ").(*tview.InputField).SetText("")
 		addContactForm.GetFormItemByLabel("Multihash: ").(*tview.InputField).SetText("")
 	}
